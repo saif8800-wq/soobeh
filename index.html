@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#070b1e">
+<title>Soobeh Kiosk — Sistem Jadual Syif & Gaji</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,Roboto,'Helvetica Neue',sans-serif;font-size:17px;line-height:1.45;color:#eef2ff;background:#070b1e;-webkit-font-smoothing:antialiased}
+h1{font-size:30px;margin:6px 0}h2{font-size:23px;margin:0}h3{font-size:18px;margin:0 0 10px}
+h3 small{opacity:.6;font-weight:600}p{margin:8px 0}small{font-size:13px}
+button{font-family:inherit}
+.blob{position:fixed;border-radius:50%;filter:blur(90px);opacity:.33;z-index:-1;pointer-events:none}
+.b1{width:420px;height:420px;background:#4f46e5;top:-120px;left:-100px;animation:float 19s ease-in-out infinite}
+.b2{width:380px;height:380px;background:#0ea5e9;bottom:-100px;right:-80px;animation:float 23s ease-in-out infinite reverse}
+.b3{width:340px;height:340px;background:#d946ef;bottom:30%;left:55%;animation:float 17s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(34px,-42px) scale(1.09)}}
+.glass{background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.05));backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);border:1px solid rgba(255,255,255,.18);border-radius:24px;box-shadow:0 12px 40px rgba(2,6,23,.45),inset 0 1px 0 rgba(255,255,255,.15)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:54px;padding:12px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.10);color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:.18s;text-decoration:none}
+.btn:hover{transform:translateY(-2px);background:rgba(255,255,255,.18)}
+.btn:active{transform:scale(.97)}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn-primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);border-color:transparent;box-shadow:0 8px 24px rgba(99,102,241,.45)}
+.btn-ok{background:linear-gradient(135deg,#10b981,#34d399);border-color:transparent;box-shadow:0 8px 20px rgba(16,185,129,.35)}
+.btn-danger{background:linear-gradient(135deg,#ef4444,#f87171);border-color:transparent;box-shadow:0 8px 20px rgba(239,68,68,.35)}
+.btn-big{width:100%;min-height:62px;font-size:19px}
+.btn-sm{min-height:42px;padding:7px 14px;font-size:15px;border-radius:13px}
+.ghost{background:transparent;border-color:rgba(255,255,255,.25)}
+.field{display:block;margin:12px 0}
+.field>span{display:block;font-weight:700;margin-bottom:6px;font-size:15px;opacity:.88}
+input,select,textarea{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:14px;color:#fff;padding:14px;font-size:18px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid #818cf8;border-color:#818cf8}
+select option{color:#0b1026;background:#fff}
+textarea{resize:vertical}
+.formgrid{display:grid;gap:0 14px}
+@media(min-width:700px){.formgrid{grid-template-columns:1fr 1fr}}
+.chk{display:flex;gap:10px;align-items:center;margin:12px 0;font-weight:700}
+.chk input{width:22px;height:22px;accent-color:#818cf8}
+.landing{max-width:680px;margin:0 auto;padding:30px 16px 60px;text-align:center}
+.hero{padding:34px 22px;margin-bottom:6px}
+.hero p{opacity:.8;margin:6px 0 12px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.portalgrid{display:grid;gap:14px;margin-top:16px}
+@media(min-width:700px){.portalgrid{grid-template-columns:1fr 1fr}}
+.portal{padding:28px 20px;cursor:pointer;text-align:center;color:#fff;display:block}
+.portal:hover{transform:translateY(-3px)}
+.portal h2{margin:8px 0 4px}
+.portal p{opacity:.75;font-size:15px;min-height:44px}
+.p-ic{font-size:44px}
+.foot{opacity:.55;font-size:13px;margin-top:22px}
+.loginwrap{max-width:460px;margin:0 auto;padding:18px 16px 70px}
+.loginbox{padding:24px;margin-top:14px;text-align:center}
+.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:21px;flex:none}
+.logo.big{width:78px;height:78px;font-size:36px;margin:0 auto 10px}
+.pin-dots{display:flex;gap:12px;justify-content:center;padding:12px}
+.dot{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.4)}
+.dot.on{background:#fff;box-shadow:0 0 10px rgba(255,255,255,.7)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:340px;margin:10px auto}
+.key{min-height:64px;font-size:27px;font-weight:800;border-radius:18px;color:#fff;cursor:pointer;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(8px)}
+.key:active{transform:scale(.95);background:rgba(255,255,255,.22)}
+.loginerr{display:none;margin:12px 0;padding:13px;border-radius:14px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.5);color:#fecaca;font-weight:700}
+.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+.hint{opacity:.65;font-size:13.5px;margin:10px 0 0}
+details.demo{margin-top:16px;padding:0;overflow:hidden}
+details.demo summary{cursor:pointer;padding:15px 18px;font-weight:800}
+details.demo .inner{padding:0 18px 16px}
+.appbar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;margin:12px;border-radius:20px;position:sticky;top:10px;z-index:60}
+.brand{display:flex;gap:11px;align-items:center;min-width:0}
+.brand>div:last-child{min-width:0}
+.brand b{display:block;font-size:17px}
+.brand small{display:block;opacity:.65;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44vw}
+.appbar-actions{display:flex;gap:8px}
+.iconbtn{position:relative;width:47px;height:47px;border-radius:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);font-size:21px;cursor:pointer;color:#fff;flex:none}
+.iconbtn:hover{background:rgba(255,255,255,.2)}
+.badge{position:absolute;top:-5px;right:-5px;background:#ef4444;color:#fff;font-size:11px;border-radius:999px;padding:2px 6px;font-weight:800;border:1px solid rgba(255,255,255,.4)}
+.wrap{max-width:1020px;margin:0 auto;padding:0 14px 140px}
+.pagehead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
+.monthnav{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:16px}
+.monthnav b{min-width:120px;text-align:center}
+.monthnav button{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:17px;cursor:pointer}
+.notice{padding:14px 16px;border-radius:16px;margin:10px 0;font-size:15.5px;border:1px solid;line-height:1.5}
+.notice.info{background:rgba(129,140,248,.12);border-color:rgba(129,140,248,.45)}
+.notice.ok{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45)}
+.notice.warn{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.5);color:#fde68a}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 11px;border-radius:999px;font-size:12.5px;font-weight:800;border:1px solid;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#e2e8f0}
+.chip-ok{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.55);color:#a7f3d0}
+.chip-wait{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.55);color:#fde68a}
+.chip-no{background:rgba(148,163,184,.12);border-color:rgba(148,163,184,.4);color:#cbd5e1}
+.chip-info{background:rgba(129,140,248,.15);border-color:rgba(129,140,248,.5);color:#c7d2fe}
+.chip-warn{background:rgba(248,113,113,.15);border-color:rgba(248,113,113,.5);color:#fecaca}
+.card{padding:18px;margin:12px 0}
+.card>p{opacity:.8}
+.detailrow{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px dashed rgba(255,255,255,.13);font-size:15.5px;flex-wrap:wrap}
+.detailrow:last-child{border-bottom:0}
+.detailrow span{opacity:.72}
+.sect{margin:20px 0 8px;font-size:17px;opacity:.85}
+.seclist{padding-left:20px;margin:6px 0}
+.seclist li{margin:9px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:12px}
+.cal-dow{text-align:center;font-weight:800;opacity:.6;font-size:12.5px;padding:4px 0;text-transform:uppercase;letter-spacing:.05em}
+.cal-cell{min-height:88px;border-radius:14px;background:rgba(255,255,255,.05);padding:6px;display:flex;flex-direction:column;gap:4px}
+.cal-cell.blank{background:transparent}
+.cal-cell.past{opacity:.5}
+.cal-day{font-size:13px;font-weight:800;text-align:center;opacity:.85}
+.slot{border:0;border-radius:10px;padding:5px;font-size:11.5px;font-weight:800;display:flex;justify-content:space-between;align-items:center;cursor:pointer;color:#fff;min-height:31px;transition:.15s}
+.slot:hover{filter:brightness(1.25)}
+.slot:active{transform:scale(.94)}
+.st-ok{background:rgba(52,211,153,.25);box-shadow:inset 0 0 0 1.5px rgba(52,211,153,.75)}
+.st-wait{background:rgba(251,191,36,.25);box-shadow:inset 0 0 0 1.5px rgba(251,191,36,.75)}
+.st-no{background:rgba(148,163,184,.15);box-shadow:inset 0 0 0 1.5px rgba(148,163,184,.4);opacity:.85}
+.st-taken{background:rgba(96,165,250,.16);box-shadow:inset 0 0 0 1.5px rgba(96,165,250,.5)}
+.st-free{background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14)}
+.st-none{background:transparent;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.07);opacity:.5}
+@media(max-width:400px){.slot{font-size:10.5px}.cal-cell{min-height:80px}}
+.brow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+.brow:last-child{border-bottom:0}
+.brow-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.amt{font-size:18px;font-weight:900;color:#a7f3d0;white-space:nowrap}
+.shiftblock{margin:8px 0;padding:10px;border-radius:14px;background:rgba(255,255,255,.05)}
+.shifttitle{font-weight:800;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:15.5px}
+.tbl{width:100%;border-collapse:collapse;font-size:15px}
+.tbl th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;opacity:.6;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.16)}
+.tbl td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:top}
+.tblwrap{overflow-x:auto}
+.statrow{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+.stat{flex:1;min-width:130px;background:rgba(255,255,255,.06);border-radius:16px;padding:13px;text-align:center}
+.stat b{display:block;font-size:23px;margin-top:2px}
+.stat small{opacity:.68}
+.statgrid{display:grid;gap:14px}
+@media(min-width:840px){.statgrid{grid-template-columns:1fr 1fr}}
+.bigtotal{font-size:34px;font-weight:900;background:linear-gradient(135deg,#a7f3d0,#67e8f9);-webkit-background-clip:text;background-clip:text;color:transparent}
+.chart{display:flex;align-items:flex-end;gap:6px;height:150px;padding:10px 2px 0}
+.chart-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.bars{display:flex;gap:3px;align-items:flex-end;height:calc(100% - 18px)}
+.bar{width:9px;border-radius:4px 4px 0 0;min-height:3px}
+.bm{background:linear-gradient(180deg,#fbbf24,#f59e0b)}
+.be{background:linear-gradient(180deg,#818cf8,#6366f1)}
+.chart-col small{font-size:10.5px;opacity:.65;margin-top:3px}
+.bottomnav{position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom));width:calc(100% - 20px);max-width:560px;display:flex;justify-content:space-around;padding:8px;z-index:80;border-radius:22px}
+.navbtn{flex:1;background:transparent;border:0;color:rgba(255,255,255,.62);display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:14px;cursor:pointer}
+.navbtn .ic{font-size:22px}
+.navbtn small{font-size:11.5px;font-weight:700}
+.navbtn.active{background:rgba(99,102,241,.38);color:#fff}
+.pillnav{display:flex;gap:8px;overflow-x:auto;padding:9px;margin:10px 0;border-radius:18px;position:sticky;top:88px;z-index:55;scrollbar-width:none}
+.pillnav::-webkit-scrollbar{display:none}
+.pill{white-space:nowrap;padding:11px 16px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid transparent;color:rgba(255,255,255,.82);font-weight:700;cursor:pointer;font-size:15px}
+.pill.active{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 6px 18px rgba(99,102,241,.4)}
+.notif{padding:11px 4px;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px}
+.notif.unread{border-left:3px solid #fbbf24;padding-left:10px}
+.notif small{opacity:.6;display:block}
+#modalRoot{display:none;position:fixed;inset:0;z-index:300;background:rgba(3,7,24,.66);backdrop-filter:blur(8px);padding:18px;overflow:auto}
+#modalRoot.open{display:flex;align-items:flex-start;justify-content:center}
+.modal{width:100%;max-width:560px;padding:20px;margin:5vh 0}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.modal-head h3{margin:0;font-size:20px}
+#toastWrap{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:400;display:flex;flex-direction:column;gap:8px;width:min(92vw,430px)}
+.toast{padding:14px 18px;border-radius:16px;font-weight:700;backdrop-filter:blur(16px);background:rgba(18,24,48,.92);border:1px solid rgba(255,255,255,.22);animation:tin .3s;font-size:15.5px}
+.toast.ok{border-color:#34d399;color:#a7f3d0}
+.toast.err{border-color:#f87171;color:#fecaca}
+.toast.out{opacity:0;transition:.4s}
+@keyframes tin{from{opacity:0;transform:translateY(-10px)}to{opacity:1}}
+.ps-totalbox{display:flex;justify-content:space-between;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(52,211,153,.2),rgba(103,232,249,.15));border:1px solid rgba(52,211,153,.45);padding:14px 16px;border-radius:16px;margin-top:12px;font-weight:900;font-size:20px;flex-wrap:wrap}
+.shiftdet summary{cursor:pointer;padding:11px 0;font-weight:800;color:#c7d2fe}
+#printArea{display:none}
+@media print{
+ body>*:not(#printArea){display:none!important}
+ #printArea{display:block!important}
+ @page{margin:14mm}
+ .payslip{color:#000;font-size:13px;max-width:100%}
+ .payslip h1{font-size:24px;margin:0}
+ .payslip .ps-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:12px}
+ .payslip table{width:100%;border-collapse:collapse;margin:10px 0}
+ .payslip th,.payslip td{border:1px solid #555;padding:6px 8px;font-size:12px}
+ .payslip th{background:#eee}
+ .payslip .ps-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 18px;font-size:12.5px;margin-bottom:4px}
+ .payslip .ps-total{border:2px solid #000;padding:11px;display:flex;justify-content:space-between;font-size:16px;font-weight:800;margin-top:10px}
+ .payslip .ps-note{font-size:10px;color:#333;margin-top:14px}
+ .payslip .ps-sign{margin-top:30px;display:flex;justify-content:space-between;font-size:12px}
+ .payslip tr{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+<div id="app"></div>
+<div id="modalRoot" onclick="modalBackdrop(event)"></div>
+<div id="toastWrap"></div>
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   SOOBEH KIOSK — Sistem Jadual Syif & Gaji (Fasa 1, PRD v1.0)
+   Frontend: Vercel  |  Backend: Supabase (Postgres + Auth + RLS + RPC)
+   ===================================================================== */
+
+/* ---------- 1. UTILITI ---------- */
+function $(s){return document.querySelector(s)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function pad2(n){return String(n).padStart(2,'0')}
+function rm(n){return 'RM '+(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function rm2(n){return 'RM '+(n||0).toFixed(2)}
+const HARI=['Ahad','Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu'];
+const BLN=['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'];
+function ymd(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())}
+function todayStr(){return ymd(new Date())}
+function monthKey(ds){return ds.slice(0,7)}
+function daysInMonth(mk){const p=mk.split('-');return new Date(+p[0],+p[1],0).getDate()}
+function isWeekend(ds){const w=new Date(ds+'T00:00:00').getDay();return w===0||w===6}
+function shiftMonth(mk,delta){const p=mk.split('-');return ymd(new Date(+p[0],+p[1]-1+delta,1)).slice(0,7)}
+function fmtDateDS(ds){const d=new Date(ds+'T00:00:00');return HARI[d.getDay()]+', '+d.getDate()+' '+BLN[d.getMonth()]+' '+d.getFullYear()}
+function dShort(ds){const d=new Date(ds+'T00:00:00');return d.getDate()+' '+BLN[d.getMonth()].slice(0,3)+' '+d.getFullYear()}
+function monthLabel(mk){const p=mk.split('-');return BLN[+p[1]-1]+' '+p[0]}
+function ago(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'baru sebentar';if(s<3600)return Math.floor(s/60)+' minit lalu';if(s<86400)return Math.floor(s/3600)+' jam lalu';return Math.floor(s/86400)+' hari lalu'}
+
+/* ---------- 2. SAMBUNGAN SUPABASE ---------- */
+let SB=null, ME=null;
+const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false};
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],published:{},settings:Object.assign({},DEF_SET),slotCounts:{}}}
+let DB=emptyDB();
+
+/* ---------- 3. PENGURUSAN DATA (cache + Supabase) ---------- */
+const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active});
+function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
+const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
+const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show});
+const mapSwap=(r)=>({id:r.id,entryId:r.entry_id,exchangeEntryId:r.exchange_entry_id,fromStaffId:r.from_staff,toStaffId:r.to_staff,reason:r.reason||'',status:r.status,t:Date.parse(r.created_at),tPeer:r.t_peer?Date.parse(r.t_peer):null,tMgr:r.t_mgr?Date.parse(r.t_mgr):null,by:usernameOf(r.decided_by)});
+const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.entered_by),t:Date.parse(r.updated_at)});
+const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
+const mapNotif=(r)=>({id:r.id,userId:r.user_id,msg:r.msg,read:r.read,t:Date.parse(r.created_at)});
+const mapAudit=(r)=>({t:Date.parse(r.at),by:r.by_username||'system',action:r.action,detail:r.detail||''});
+const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales}:Object.assign({},DEF_SET);
+
+async function loadAll(){
+  if(!ME)return;
+  const isMgr=['manager','admin'].includes(ME.role);
+  const q=await Promise.all([
+    SB.from('profiles').select('*').order('name'),
+    SB.from('bookings').select('*'),
+    SB.from('schedule').select('*'),
+    SB.from('published').select('*'),
+    SB.from('swaps').select('*'),
+    SB.from('sales').select('*'),
+    SB.from('payslips').select('*'),
+    SB.from('notifications').select('*').order('created_at',{ascending:false}).limit(150),
+    SB.from('settings').select('*').eq('id',1)
+  ]);
+  if(q[0].error)return toast('Gagal memuatkan data: '+friendly(q[0].error),'err');
+  DB.users=(q[0].data||[]).map(mapProfile);
+  DB.bookings=(q[1].data||[]).map(mapBooking);
+  DB.schedule=(q[2].data||[]).map(mapSchedule);
+  DB.published={};(q[3].data||[]).forEach(r=>DB.published[r.month_key]={t:Date.parse(r.published_at),by:usernameOf(r.published_by)});
+  DB.swaps=(q[4].data||[]).map(mapSwap);
+  DB.sales=(q[5].data||[]).map(mapSale);
+  DB.payslips=(q[6].data||[]).map(mapPayslip);
+  DB.notifications=(q[7].data||[]).map(mapNotif);
+  DB.settings=mapSettings((q[8].data||[])[0]);
+  if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
+  else await loadSlotCounts(ROUTE.mk||monthKey(todayStr()));
+}
+async function loadSlotCounts(mk){
+  if(!ME||ME.role!=='staff'||!mk)return;
+  const {data,error}=await SB.rpc('slot_counts',{p_month:mk});
+  if(error)return;
+  DB.slotCounts={};(data||[]).forEach(r=>{if(r.d)DB.slotCounts[r.d+'|'+r.shift]=r.n});
+}
+async function sync(){await loadAll()}
+async function syncNow(){if(!ME)return;await sync();render();toast('Data dikemaskini 🔄','ok')}
+
+/* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
+function currentUser(){return ME}
+function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
+async function logout(msg){
+  if(ME)await logAudit('logout',ME.username);
+  try{await SB.auth.signOut()}catch(e){}
+  ME=null;DB=emptyDB();
+  ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};
+  pinBuf='';render();if(msg)toast(msg,'info');
+}
+function startIdleWatch(){let last=Date.now();
+  ['click','keydown','touchstart','pointerdown'].forEach(ev=>document.addEventListener(ev,()=>{last=Date.now()},{capture:true,passive:true}));
+  setInterval(()=>{if(ME&&Date.now()-last>30*60*1000)logout('🔒 Auto log keluar: 30 minit tidak aktif')},20000);
+}
+async function logAudit(action,detail){try{await SB.from('audit').insert({action:action,detail:detail||''})}catch(e){}}
+async function notifyUsers(ids,msg){try{const list=(ids||[]).filter(Boolean).map(id=>({user_id:id,msg:msg}));if(list.length)await SB.from('notifications').insert(list)}catch(e){}}
+async function notifyManagers(msg){await notifyUsers(DB.users.filter(u=>(u.role==='manager'||u.role==='admin')&&u.active!==false).map(u=>u.id),msg)}
+function friendly(e){const m=(e&&e.message)||String(e||'Ralat');if(/duplicate key/i.test(m))return'Rekod ini sudah wujud';if(/row-level security/i.test(m))return'Akses ditolak 🔒';return m}
+function bellHTML(){const u=currentUser();if(!u)return '';const c=DB.notifications.filter(n=>n.userId===u.id&&!n.read).length;return '<button class="iconbtn" onclick="openNotifs()" aria-label="Notifikasi">🔔'+(c?'<span class="badge">'+c+'</span>':'')+'</button>'}
+async function openNotifs(){
+  const u=currentUser();if(!u)return;
+  const ns=DB.notifications.filter(n=>n.userId===u.id).sort((a,b)=>b.t-a.t).slice(0,40);
+  openModal('🔔 Notifikasi',ns.length?ns.map(n=>'<div class="notif '+(n.read?'':'unread')+'"><small>'+ago(n.t)+'</small><div>'+esc(n.msg)+'</div></div>').join(''):'<p style="opacity:.7">Tiada notifikasi.</p>');
+  if(ns.some(n=>!n.read)){try{await SB.from('notifications').update({read:true}).eq('user_id',u.id).eq('read',false)}catch(e){};await sync()}
+  render();
+}
+
+/* ---------- 5. LOGIK PERNIAGAAN (PRD Seksyen 6 — dinilai SETIAP SYIF) ---------- */
+function getSale(date,shift){const s=DB.sales.find(x=>x.date===date&&x.shift===shift);return s?s.amount:null}
+function shiftRate(ds,shift,sale){const S=DB.settings;const th=isWeekend(ds)?S.weekendThreshold:S.weekdayThreshold;return (sale!=null&&sale>th)?S.highRate:S.baseRate}
+function bookingsFor(date,shift){return DB.bookings.filter(b=>b.date===date&&b.shift===shift)}
+function monthPublished(mk){return !!DB.published[mk]}
+function scheduledEntries(staffId,mk){
+  if(DB.published[mk])return DB.schedule.filter(e=>e.monthKey===mk&&e.staffId===staffId);
+  return DB.bookings.filter(b=>monthKey(b.date)===mk&&b.staffId===staffId&&b.status==='approved').map(b=>({date:b.date,shift:b.shift,noShow:false}));
+}
+function computeCycle(staffId,pStart,pEnd){
+  const S=DB.settings,mk=monthKey(pStart);
+  const entries=scheduledEntries(staffId,mk).filter(e=>!e.noShow&&e.date>=pStart&&e.date<=pEnd);
+  const shifts=[];let totalHours=0,basePay=0,highHours=0,extraPay=0,salesSum=0;
+  entries.forEach(e=>{
+    const sale=getSale(e.date,e.shift),rate=shiftRate(e.date,e.shift,sale),hours=S.shiftHours,amount=hours*rate;
+    totalHours+=hours;basePay+=hours*S.baseRate;
+    if(rate>S.baseRate){highHours+=hours;extraPay+=hours*(S.highRate-S.baseRate)}
+    if(sale!=null)salesSum+=sale;
+    shifts.push({date:e.date,shift:e.shift,hours:hours,sale:sale,rate:rate,amount:amount});
+  });
+  shifts.sort((a,b)=>a.date.localeCompare(b.date));
+  return {shifts:shifts,totalHours:totalHours,basePay:basePay,highHours:highHours,extraPay:extraPay,salesSum:salesSum};
+}
+function perfEligible(staffId,mk){
+  const sum=scheduledEntries(staffId,mk).filter(e=>!e.noShow).reduce((a,e)=>a+(getSale(e.date,e.shift)||0),0);
+  return {ok:sum>DB.settings.monthlySalesThreshold,sum:sum};
+}
+function attEligible(staffId,mk){
+  const sched=scheduledEntries(staffId,mk);
+  if(!sched.length)return {ok:false,why:'Tiada syif dijadualkan bulan ini'};
+  if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir'};
+  const inv=DB.swaps.filter(s=>{const e=DB.schedule.find(x=>x.id===s.entryId);return e&&monthKey(e.date)===mk&&(s.fromStaffId===staffId||s.toStaffId===staffId)});
+  if(inv.length)return {ok:false,why:'Terdapat rekod pertukaran syif'};
+  return {ok:true,why:''};
+}
+function estimateFor(staffId){
+  const S=DB.settings,mk=monthKey(todayStr());
+  const c=computeCycle(staffId,mk+'-01',todayStr());
+  const perf=perfEligible(staffId,mk),att=attEligible(staffId,mk);
+  const st=DB.users.find(u=>u.id===staffId)||{};
+  const typh=st.typhoidCount<S.typhoidMax?S.typhoidAllowance:0;
+  return {c:c,perf:perf,att:att,typh:typh,total:c.basePay+c.extraPay+(perf.ok?S.perfBonus:0)+(att.ok?S.attBonus:0)+typh};
+}
+
+/* ---------- 6. SLIP GAJI ---------- */
+async function generatePayslip(staffId,pStart,pEnd){
+  const staff=DB.users.find(u=>u.id===staffId);
+  if(!staff||staff.role!=='staff')return {ok:false,msg:'Staff tidak sah'};
+  if(DB.payslips.some(p=>p.staffId===staffId&&p.start===pStart))return {ok:false,msg:staff.name+' — slip tempoh ini sudah dijana'};
+  const S=DB.settings,mk=monthKey(pStart);
+  const c=computeCycle(staffId,pStart,pEnd);
+  const perf=perfEligible(staffId,mk),att=attEligible(staffId,mk);
+  const secondHalf=pStart.slice(8,10)==='15';
+  const includeBonus=staff.payCycle==='monthly'?true:secondHalf;
+  const typhCountBefore=staff.typhoidCount;
+  const typh=typhCountBefore<S.typhoidMax?S.typhoidAllowance:0;
+  if(typh)staff.typhoidCount++;
+  const perfAmt=(includeBonus&&perf.ok)?S.perfBonus:0;
+  const attAmt=(includeBonus&&att.ok)?S.attBonus:0;
+  const total=c.basePay+c.extraPay+perfAmt+attAmt+typh;
+  const slip={staffName:staff.name,username:staff.username,cycle:staff.payCycle,start:pStart,end:pEnd,
+    shiftCount:c.shifts.length,hours:c.totalHours,basePay:c.basePay,highHours:c.highHours,extraPay:c.extraPay,
+    salesSum:c.salesSum,perfSum:perf.sum,perfAmt:perfAmt,attAmt:attAmt,attWhy:att.ok?'':att.why,includeBonus:includeBonus,
+    typh:typh,typhNo:typh?typhCountBefore+1:null,typhCountBefore:typhCountBefore,total:total,shifts:c.shifts,
+    t:Date.now(),by:ME.username};
+  const {error}=await SB.from('payslips').insert({staff_id:staffId,start:pStart,end:pEnd,cycle:staff.payCycle,payload:slip,created_by:ME.id});
+  if(error){if(typh)staff.typhoidCount--;if(/duplicate/i.test(error.message||''))return {ok:false,msg:staff.name+' — slip tempoh ini sudah dijana'};return {ok:false,msg:friendly(error)}}
+  if(typh){try{await SB.from('profiles').update({typhoid_count:staff.typhoidCount}).eq('id',staffId)}catch(e){}}
+  await notifyUsers([staffId],'🧾 Slip gaji anda untuk '+dShort(pStart)+' – '+dShort(pEnd)+' telah dijana ('+rm(total)+'). Semak tab "Slip Gaji".');
+  await logAudit('payslip_gen',staff.username+' · '+dShort(pStart)+'–'+dShort(pEnd)+' · '+rm(total));
+  return {ok:true};
+}
+async function genPayslips(kind){
+  const u=reqMgr();if(!u)return;
+  const mk=ROUTE.pmk,dim=daysInMonth(mk);let start,end,cyc;
+  if(kind==='M'){start=mk+'-01';end=mk+'-'+pad2(dim);cyc='monthly'}
+  else if(kind==='B1'){start=mk+'-01';end=mk+'-14';cyc='biweekly'}
+  else{start=mk+'-15';end=mk+'-'+pad2(dim);cyc='biweekly'}
+  const list=DB.users.filter(x=>x.role==='staff'&&x.active!==false&&x.payCycle===cyc);
+  if(!list.length)return toast('Tiada staff dalam kumpulan ini','err');
+  let ok=0,skip=0;
+  for(const x of list){const r=await generatePayslip(x.id,start,end);r.ok?ok++:skip++}
+  await logAudit('payslip_group','Kitaran '+cyc+' '+monthLabel(mk)+' — '+ok+' slip');
+  await sync();render();
+  toast('Jana slip '+dShort(start)+' – '+dShort(end)+': '+ok+' berjaya'+(skip?', '+skip+' dilangkau (sudah wujud)':'')+' ✔','ok');
+}
+async function deleteSlip(id){
+  const u=reqMgr();if(!u)return;const p=DB.payslips.find(x=>x.id===id);if(!p)return;
+  if(!confirm('Padam slip '+p.staffName+' ('+dShort(p.start)+' – '+dShort(p.end)+')? Kiraan elaun typhoid akan dikembalikan & slip boleh dijana semula.'))return;
+  const {error}=await SB.from('payslips').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  if(p.typh>0){const st=DB.users.find(x=>x.id===p.staffId);if(st){st.typhoidCount=Math.max(0,st.typhoidCount-1);try{await SB.from('profiles').update({typhoid_count:st.typhoidCount}).eq('id',st.id)}catch(e){}}}
+  await logAudit('payslip_delete',(p.username||'')+' · '+dShort(p.start));
+  await sync();render();toast('Slip dipadam','ok');
+}
+function slipBodyHTML(p){
+  const S=DB.settings;
+  const perfNote=p.includeBonus?(p.perfAmt?'Jualan syif anda sebulan '+rm(p.perfSum)+' > '+rm(S.monthlySalesThreshold):'Jualan sebulan '+rm(p.perfSum)+' tidak melebihi '+rm(S.monthlySalesThreshold)):'Bonus dinilai bulanan — masuk pada slip kitaran kedua';
+  const attNote=p.includeBonus?(p.attAmt?'Hadir penuh, tiada tidak-hadir & tiada pertukaran syif':p.attWhy):'Bonus dinilai bulanan — masuk pada slip kitaran kedua';
+  const typhTxt=p.typh?rm2(p.typh)+' <small>(Bayaran '+p.typhNo+'/'+S.typhoidMax+')</small>':'— <small>('+S.typhoidMax+'/'+S.typhoidMax+' selesai)</small>';
+  let h='<div class="detailrow"><span>Tempoh</span><b>'+dShort(p.start)+' – '+dShort(p.end)+'</b></div>'+
+  '<div class="detailrow"><span>Kitaran</span><b>'+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</b></div>'+
+  '<div class="detailrow"><span>Syif dihadiri</span><b>'+p.shiftCount+' syif · '+p.hours+' jam</b></div>'+
+  '<table class="tbl" style="margin-top:10px"><tr><th>Butiran</th><th style="text-align:right">Jumlah</th></tr>'+
+  '<tr><td>Gaji Asas — '+p.hours+' jam × '+rm2(S.baseRate)+'/jam</td><td style="text-align:right">'+rm2(p.basePay)+'</td></tr>'+
+  (p.extraPay>0?'<tr><td>Tambahan Kadar Tinggi — '+p.highHours+' jam × '+rm2(S.highRate-S.baseRate)+'/jam</td><td style="text-align:right">'+rm2(p.extraPay)+'</td></tr>':'')+
+  '<tr><td>Bonus Prestasi Jualan <small>'+esc(perfNote)+'</small></td><td style="text-align:right">'+(p.perfAmt?rm2(p.perfAmt):'—')+'</td></tr>'+
+  '<tr><td>Bonus Kehadiran & Disiplin <small>'+esc(attNote)+'</small></td><td style="text-align:right">'+(p.attAmt?rm2(p.attAmt):'—')+'</td></tr>'+
+  '<tr><td>Elaun Suntikan Typhoid</td><td style="text-align:right">'+typhTxt+'</td></tr></table>'+
+  '<div class="ps-totalbox"><span>JUMLAH BAYARAN</span><span>'+rm(p.total)+'</span></div>';
+  if(p.shifts&&p.shifts.length){
+    h+='<details class="shiftdet"><summary>Lihat pecahan '+p.shifts.length+' syif</summary><div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Jam</th><th>Jualan</th><th>Kadar</th><th style="text-align:right">Jumlah</th></tr>'+
+    p.shifts.map(s=>'<tr><td>'+dShort(s.date)+'</td><td>'+(s.shift==='morning'?'Pagi':'Petang')+'</td><td>'+s.hours+'</td><td>'+(s.sale==null?'—':rm2(s.sale))+'</td><td>'+rm2(s.rate)+'</td><td style="text-align:right">'+rm2(s.amount)+'</td></tr>').join('')+'</table></div></details>';
+  }
+  return h;
+}
+function viewSlip(id){const u=currentUser();const p=DB.payslips.find(x=>x.id===id);if(!p)return;
+  if(u.role==='staff'&&p.staffId!==u.id)return toast('Akses ditolak 🔒','err');
+  openModal('Slip Gaji — '+esc(p.staffName),slipBodyHTML(p)+'<button class="btn btn-primary btn-big" style="margin-top:12px" onclick="downloadSlip(\''+p.id+'\')">⬇ Muat Turun PDF</button>');}
+function payslipHTML(p){
+  const S=DB.settings;
+  const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+(s.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
+  const line=(l,v)=>'<tr><td>'+l+'</td><td style="text-align:right">'+v+'</td></tr>';
+  return '<div class="payslip"><div class="ps-head"><div><h1>SOOBEH KIOSK</h1><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
+  '<div class="ps-grid"><div><b>Nama:</b> '+esc(p.staffName)+'</div><div><b>ID Pekerja:</b> '+esc(p.username)+'</div><div><b>Tempoh Kitaran:</b> '+fmtDateDS(p.start)+' – '+fmtDateDS(p.end)+'</div><div><b>Kitaran Bayaran:</b> '+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</div></div>'+
+  '<table><tr><th>Butiran</th><th style="text-align:right">Jumlah (RM)</th></tr>'+
+  line('Gaji Asas — '+p.hours+' jam × RM '+S.baseRate.toFixed(2)+'/jam',p.basePay.toFixed(2))+
+  (p.extraPay>0?line('Tambahan Kadar Tinggi — '+p.highHours+' jam × RM '+(S.highRate-S.baseRate).toFixed(2)+'/jam',p.extraPay.toFixed(2)):'')+
+  line('Bonus Prestasi Jualan'+(p.perfAmt?'':' — tidak layak (jualan sebulan RM '+p.perfSum.toFixed(2)+')'),(p.perfAmt||0).toFixed(2))+
+  line('Bonus Kehadiran & Disiplin'+(p.attAmt?'':' — tidak layak'),(p.attAmt||0).toFixed(2))+
+  line('Elaun Suntikan Typhoid'+(p.typh?' (Bayaran '+p.typhNo+'/'+S.typhoidMax+')':' ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)'),(p.typh||0).toFixed(2))+'</table>'+
+  (rows?'<table><tr><th>Tarikh</th><th>Syif</th><th>Jam</th><th>Jualan Syif</th><th>Kadar/Jam</th><th style="text-align:right">Jumlah</th></tr>'+rows+'</table>':'')+
+  '<div class="ps-total"><span>JUMLAH BAYARAN</span><span>RM '+p.total.toFixed(2)+'</span></div>'+
+  '<p class="ps-note">Slip ini dijana secara automatik oleh Sistem Soobeh mengikut peraturan gaji semasa (dinilai setiap syif). Ia adalah rekod komputer dan bukan bukti transaksi bank.</p>'+
+  '<div class="ps-sign"><div>Disahkan oleh Manager<br><br>____________________</div><div>Diterima oleh Staff<br><br>____________________</div></div></div>';
+}
+function downloadSlip(id){const p=DB.payslips.find(x=>x.id===id);if(!p)return;
+  $('#printArea').innerHTML=payslipHTML(p);
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);}
+
+/* ---------- 7. MODUL TEMPahan SYIF (PRD 5.2/5.3) ---------- */
+async function submitBooking(ds,shift){
+  if(!ME||ME.role!=='staff')return {ok:false,msg:'Akses ditolak'};
+  if(monthPublished(monthKey(ds)))return {ok:false,msg:'Jadual bulan ini telah dikunci — guna Pertukaran Syif'};
+  if(ds<=todayStr())return {ok:false,msg:'Tarikh lampau — tempahan tertutup'};
+  if(ds>ymd(new Date(Date.now()+65*864e5)))return {ok:false,msg:'Tempahan dibenarkan dalam 2 bulan hadapan sahaja'};
+  if(DB.bookings.some(b=>b.staffId===ME.id&&b.date===ds&&b.shift===shift&&(b.status==='pending'||b.status==='approved')))return {ok:false,msg:'Anda sudah menempah slot ini'};
+  const n=DB.slotCounts[ds+'|'+shift]||0;
+  if(n>=DB.settings.maxPerShift)return {ok:false,msg:'Slot penuh (had '+DB.settings.maxPerShift+' staff/syif)'};
+  const {error}=await SB.from('bookings').insert({staff_id:ME.id,date:ds,shift:shift,status:'pending'});
+  if(error)return {ok:false,msg:friendly(error)}; /* trigger DB turut menguatkuasakan peraturan ini */
+  await logAudit('booking_submit',fmtDateDS(ds)+' · '+(shift==='morning'?'Pagi':'Petang'));
+  await notifyManagers('📋 '+ME.name+' menempah '+fmtDateDS(ds)+' ('+(shift==='morning'?'Pagi':'Petang')+').');
+  return {ok:true};
+}
+async function bookSlot(ds,shift){
+  const r=await submitBooking(ds,shift);
+  toast(r.ok?'✅ Permohonan tempahan dihantar untuk kelulusan manager':r.msg,r.ok?'ok':'err');
+  if(r.ok){closeModal();await sync();render()}
+}
+async function cancelBooking(id){
+  const b=DB.bookings.find(x=>x.id===id);
+  if(!ME||!b||b.staffId!==ME.id||b.status!=='pending'||monthPublished(monthKey(b.date)))return toast('Tidak boleh dibatalkan — hubungi manager','err');
+  const {error}=await SB.from('bookings').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('booking_cancel',fmtDateDS(b.date)+' · '+(b.shift==='morning'?'Pagi':'Petang'));
+  closeModal();await sync();render();toast('Tempahan dibatalkan','ok');
+}
+async function mgrSetBooking(id,status){
+  const u=reqMgr();if(!u)return;const b=DB.bookings.find(x=>x.id===id);if(!b)return;
+  if(monthPublished(monthKey(b.date)))return toast('Bulan ini telah dikunci','err');
+  if(status==='approved'){
+    const ap=DB.bookings.filter(x=>x.date===b.date&&x.shift===b.shift&&x.status==='approved').length;
+    if(ap>=DB.settings.maxPerShift)return toast('Had maksimum '+DB.settings.maxPerShift+' staff/syif dicapai — tolak permohonan lain','err');
+  }
+  const {error}=await SB.from('bookings').update({status:status,decided_by:ME.id,decided_at:new Date().toISOString()}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await notifyUsers([b.staffId],status==='approved'?'✅ Tempahan syif anda pada '+fmtDateDS(b.date)+' ('+(b.shift==='morning'?'Pagi':'Petang')+') telah DISAHKAN.':'⚠️ Tempahan syif anda pada '+fmtDateDS(b.date)+' tidak dipilih.');
+  await logAudit('booking_'+status,fmtDateDS(b.date)+' · '+(b.shift==='morning'?'Pagi':'Petang'));
+  await sync();render();
+}
+function confirmPublish(){const mk=ROUTE.bmk;if(monthPublished(mk))return;
+  const bks=DB.bookings.filter(b=>monthKey(b.date)===mk);
+  const ap=bks.filter(b=>b.status==='approved').length,pd=bks.filter(b=>b.status==='pending').length;
+  openModal('Keluarkan Jadual — '+monthLabel(mk),
+   '<div class="detailrow"><span>Slot disahkan</span><b>'+ap+'</b></div>'+
+   '<div class="detailrow"><span>Menunggu (akan ditanda Tidak Dipilih)</span><b>'+pd+'</b></div>'+
+   '<div class="notice warn">Selepas dikeluarkan, jadual <b>dikunci</b> — sebarang perubahan hanya melalui modul Pertukaran Syif (PRD 5.3).</div>'+
+   '<button class="btn btn-primary btn-big" onclick="publishMonth(\''+mk+'\')">🔒 Sahkan & Keluarkan Jadual</button>');}
+async function publishMonth(mk){
+  const u=reqMgr();if(!u)return;
+  if(DB.published[mk])return toast('Jadual bulan ini sudah dikeluarkan','err');
+  const {error}=await SB.rpc('publish_month',{p_month:mk,p_label:monthLabel(mk)});
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();toast('Jadual '+monthLabel(mk)+' dikeluarkan & dikunci 🔒','ok');
+}
+async function toggleNoShow(eid){
+  const u=reqMgr();if(!u)return;const e=DB.schedule.find(x=>x.id===eid);if(!e)return;
+  const {error}=await SB.from('schedule').update({no_show:!e.noShow}).eq('id',eid);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('attendance_'+(!e.noShow?'noshow':'present'),dShort(e.date)+' '+(e.shift==='morning'?'Pagi':'Petang')+' · '+(usernameOf(e.staffId)||'?'));
+  await sync();render();
+}
+
+/* ---------- 8. MODUL PERTUKARAN SYIF (PRD 5.4) ---------- */
+const SWAP_ST={pending_peer:['Menunggu Persetujuan Rakan','chip-wait'],pending_manager:['Menunggu Kelulusan Manager','chip-wait'],approved:['Diluluskan ✔','chip-ok'],declined:['Ditolak oleh Rakan','chip-no'],rejected:['Tidak Diluluskan Manager','chip-no']};
+function swapInfo(s){
+  const e=DB.schedule.find(x=>x.id===s.entryId),x=s.exchangeEntryId?DB.schedule.find(z=>z.id===s.exchangeEntryId):null;
+  const n=id=>{const u=DB.users.find(v=>v.id===id);return u?u.name:'(?)'};
+  return {date:e?e.date:null,shift:e?e.shift:null,from:n(s.fromStaffId),to:n(s.toStaffId),ex:x?{date:x.date,shift:x.shift}:null};
+}
+function swapCardHTML(s,actions){
+  const i=swapInfo(s),st=SWAP_ST[s.status]||['?','chip-info'];
+  return '<div class="card glass"><div class="brow" style="border:0"><div><b>'+esc(i.from)+'</b> ➜ <b>'+esc(i.to)+'</b><div class="chips" style="margin-top:5px"><span class="chip '+st[1]+'">'+st[0]+'</span>'+
+  (i.date?'<span class="chip chip-info">'+dShort(i.date)+' · '+(i.shift==='morning'?'Pagi':'Petang')+'</span>':'')+
+  (i.ex?'<span class="chip chip-info">⇄ '+dShort(i.ex.date)+' · '+(i.ex.shift==='morning'?'Pagi':'Petang')+'</span>':'')+'</div></div></div>'+
+  (s.reason?'<div class="detailrow"><span>Sebab</span><b>'+esc(s.reason)+'</b></div>':'')+
+  (s.tPeer?'<div class="detailrow"><span>Rakan menjawab</span><b>'+new Date(s.tPeer).toLocaleString('ms-MY')+'</b></div>':'')+
+  (s.tMgr?'<div class="detailrow"><span>Keputusan manager</span><b>'+new Date(s.tMgr).toLocaleString('ms-MY')+(s.by?' · '+esc(s.by):'')+'</b></div>':'')+
+  (actions||'')+'</div>';
+}
+function openSwapModal(preId){
+  if(!ME||ME.role!=='staff')return;
+  const mine=DB.schedule.filter(e=>e.staffId===ME.id&&e.date>=todayStr()).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!mine.length)return toast('Tiada syif anda pada masa hadapan untuk ditukar','err');
+  const peers=DB.users.filter(x=>x.role==='staff'&&x.active!==false&&x.id!==ME.id);
+  openModal('Mohon Pertukaran Syif',
+   '<label class="field"><span>1. Pilih syif anda</span><select id="swEntry">'+mine.map(e=>'<option value="'+e.id+'"'+(preId===e.id?' selected':'')+'>'+fmtDateDS(e.date)+' — '+(e.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</option>').join('')+'</select></label>'+
+   '<label class="field"><span>2. Pilih rakan sekerja</span><select id="swPeer" onchange="swapPeerChanged()">'+peers.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select></label>'+
+   '<label class="field"><span>3. Tukar dua hala? (opsyenal — pilih syif rakan)</span><select id="swEx"></select></label>'+
+   '<label class="field"><span>Sebab (untuk rujukan manager)</span><textarea id="swReason" rows="3" placeholder="Contoh: balik kampung, temujanji klinik..."></textarea></label>'+
+   '<div class="notice warn">⚠ Nota: sebarang rekod pertukaran syif akan menamatkan kelayakan <b>Bonus Kehadiran (RM'+DB.settings.attBonus+')</b> anda bagi bulan berkenaan (PRD 6.2).</div>'+
+   '<button class="btn btn-primary btn-big" onclick="submitSwap()">Hantar Permohonan</button>');
+  swapPeerChanged();}
+function swapPeerChanged(){const p=$('#swPeer').value;if(!p)return;
+  const ex=DB.schedule.filter(e=>e.staffId===p&&e.date>=todayStr()).sort((a,b)=>a.date.localeCompare(b.date));
+  $('#swEx').innerHTML='<option value="">— Tiada (serah syif sahaja) —</option>'+ex.map(e=>'<option value="'+e.id+'">'+fmtDateDS(e.date)+' — '+(e.shift==='morning'?'Pagi':'Petang')+'</option>').join('');}
+async function submitSwap(){
+  if(!ME||ME.role!=='staff')return;
+  const entryId=$('#swEntry').value,peer=$('#swPeer').value,ex=$('#swEx').value,reason=$('#swReason').value.trim();
+  const e=DB.schedule.find(x=>x.id===entryId);
+  if(!e||e.staffId!==ME.id||e.date<todayStr())return toast('Syif tidak sah','err');
+  const busy=[entryId,ex].filter(Boolean);
+  if(DB.swaps.some(s=>['pending_peer','pending_manager'].includes(s.status)&&(busy.includes(s.entryId)||busy.includes(s.exchangeEntryId))))
+    return toast('Syif ini sudah ada permohonan pertukaran aktif','err');
+  const {error}=await SB.from('swaps').insert({entry_id:entryId,exchange_entry_id:ex||null,from_staff:ME.id,to_staff:peer,reason:reason});
+  if(error)return toast(friendly(error),'err');
+  await notifyUsers([peer],'🔄 '+ME.name+' memohon pertukaran syif dengan anda: '+fmtDateDS(e.date)+' ('+(e.shift==='morning'?'Pagi':'Petang')+'). Semak tab "Tukar Syif".');
+  await logAudit('swap_submit',fmtDateDS(e.date)+' · '+(ex?'dua hala':'serah'));
+  closeModal();await sync();render();toast('Permohonan dihantar kepada rakan ✔','ok');}
+async function peerRespond(id,accept){
+  if(!ME||ME.role!=='staff')return toast('Akses ditolak','err');
+  const {error}=await SB.rpc('respond_swap',{p_id:id,p_accept:accept});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast(accept?'Anda bersetuju — dihantar kepada manager ✔':'Permohonan ditolak','ok');}
+async function mgrSwapDecide(id,approve){
+  const u=reqMgr();if(!u)return;
+  const {error}=await SB.rpc('decide_swap',{p_id:id,p_approve:approve});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast(approve?'Pertukaran diluluskan — jadual dikemaskini ✔':'Permohonan ditolak','ok');}
+
+/* ---------- 9. MODUL INPUT JUALAN (PRD 5.5) ---------- */
+async function setSaleSubmit(){
+  const S=DB.settings;
+  if(!ME||!(['manager','admin'].includes(ME.role)||(ME.role==='staff'&&S.allowStaffSales)))return toast('Akses ditolak','err');
+  const date=$('#saleDate').value,shift=$('#saleShift').value,amt=parseFloat($('#saleAmt').value);
+  if(!date||!shift)return toast('Sila lengkapkan tarikh & syif','err');
+  if(date>todayStr())return toast('Tarikh tidak boleh pada masa hadapan','err');
+  if(date<ymd(new Date(Date.now()-62*864e5)))return toast('Rekod melebihi 62 hari tidak dibenarkan','err');
+  if(isNaN(amt)||amt<0||amt>99999)return toast('Jumlah jualan tidak sah (0 – 99,999)','err');
+  const {error}=await SB.from('sales').upsert({date:date,shift:shift,amount:amt,entered_by:ME.id},{onConflict:'date,shift'});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('sales_set',date+' · '+(shift==='morning'?'Pagi':'Petang')+' · '+rm(amt));
+  ROUTE.saleEdit=null;await sync();render();toast('Jualan disimpan ✔','ok');}
+function editSale(date,shift){ROUTE.saleEdit={date:date,shift:shift};render();}
+
+/* ---------- 10. PENGURUSAN STAF (RPC server-side) ---------- */
+function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  openModal('Tambah Akaun Baharu',
+  '<label class="field"><span>Nama penuh</span><input id="nsName" placeholder="cth: Fatimah binti Omar"></label>'+
+  '<label class="field"><span>Username (ID pekerja ringkas)</span><input id="nsUser" autocapitalize="none" placeholder="cth: fatimah05"></label>'+
+  '<label class="field"><span>No. telefon</span><input id="nsPhone" placeholder="cth: 012-345 6789"></label>'+
+  '<label class="field"><span>PIN awal (4–6 digit)</span><input id="nsPin" inputmode="numeric" maxlength="6" placeholder="cth: 5678"></label>'+
+  '<label class="field"><span>Kitaran gaji</span><select id="nsCycle"><option value="monthly">Bulanan (1hb – akhir bulan)</option><option value="biweekly">Setiap 2 Minggu (1–14, 15–akhir)</option></select></label>'+
+  (me.role==='admin'?'<label class="field"><span>Peranan</span><select id="nsRole"><option value="staff">Staff</option><option value="manager">Manager</option><option value="admin">Admin</option></select></label>':'')+
+  '<button class="btn btn-primary btn-big" onclick="submitAddStaff()">✚ Tambah Akaun</button>');}
+async function submitAddStaff(){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const name=$('#nsName').value.trim(),un=$('#nsUser').value.trim().toLowerCase(),ph=$('#nsPhone').value.trim(),pin=$('#nsPin').value.trim(),cyc=$('#nsCycle').value;
+  const role=me.role==='admin'?($('#nsRole')||{value:'staff'}).value:'staff';
+  if(name.length<2)return toast('Nama tidak sah','err');
+  if(!/^[a-z0-9_.-]{2,20}$/.test(un))return toast('Username tidak sah (a-z, 0-9; 2–20 aksara)','err');
+  if(DB.users.some(x=>x.username===un))return toast('Username sudah wujud','err');
+  if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
+  const {error}=await SB.rpc('admin_create_user',{p_username:un,p_name:name,p_phone:ph,p_role:role,p_pay_cycle:cyc,p_pin:pin});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('user_add',un+' ('+role+')');
+  closeModal();await sync();render();toast('Akaun '+un+' ditambah ✔','ok');}
+function openResetPin(id){ROUTE.resetId=id;const t=DB.users.find(x=>x.id===id);if(!t)return;
+  openModal('Set Semula PIN — '+esc(t.name),
+  '<div class="notice info">Proses rasmi apabila staff terlupa PIN — tanpa OTP/emel (PRD 5.1). Staff akan dimaklumkan melalui notifikasi. Kata laluan baharu dihash (bcrypt) di server Supabase.</div>'+
+  '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="rpPin" inputmode="numeric" maxlength="6"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="submitResetPin()">Simpan PIN Baharu</button>');}
+async function submitResetPin(){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const t=DB.users.find(x=>x.id===ROUTE.resetId);if(!t)return;
+  const pin=$('#rpPin').value.trim();
+  if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
+  const {error}=await SB.rpc('admin_reset_pin',{p_username:t.username,p_pin:pin});
+  if(error)return toast(friendly(error),'err');
+  await notifyUsers([t.id],'🔑 PIN anda telah ditetapkan semula oleh '+me.name+'. Sila log masuk dengan PIN baharu.');
+  await logAudit('pin_reset',t.username+' oleh '+me.username);
+  closeModal();render();toast('PIN '+t.username+' dikemaskini ✔','ok');}
+async function toggleCycle(id){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const t=DB.users.find(x=>x.id===id);if(!t||t.role!=='staff')return;
+  const nc=t.payCycle==='monthly'?'biweekly':'monthly';
+  const {error}=await SB.from('profiles').update({pay_cycle:nc}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('paycycle_change',t.username+' → '+nc);
+  await sync();render();toast('Kitaran '+t.name+' → '+(nc==='monthly'?'Bulanan':'2-Minggu'),'ok');}
+async function toggleActive(id){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const t=DB.users.find(x=>x.id===id);if(!t||t.id===me.id)return;
+  if(t.active!==false&&!confirm('Nyahaktifkan akaun '+t.name+'? Mereka tidak boleh log masuk sehingga diaktifkan semula.'))return;
+  const nv=t.active===false;
+  const {error}=await SB.from('profiles').update({active:nv}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('user_'+(nv?'activate':'deactivate'),t.username);
+  await sync();render();toast('Akaun '+t.username+(nv?' diaktifkan ✔':' dinyahaktifkan'),'ok');}
+async function changeMyPin(){
+  const u=currentUser();if(!u)return;
+  const cur=$('#pinCur').value.trim(),n1=$('#pinNew').value.trim(),n2=$('#pinNew2').value.trim();
+  if(!/^\d{4,6}$/.test(n1))return toast('PIN baharu mesti 4–6 digit','err');
+  if(n1!==n2)return toast('Pengesahan PIN tidak sepadan','err');
+  const {error:verr}=await SB.auth.signInWithPassword({email:u.username+'@soobeh.app',password:cur+'-soobeh'});
+  if(verr)return toast('PIN semasa salah','err');
+  const {error}=await SB.auth.updateUser({password:n1+'-soobeh'});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('pin_change',u.username);
+  toast('PIN berjaya ditukar ✔','ok');closeModal();render();}
+
+/* ---------- 11. TETAPAN (Admin — PRD NFR: boleh konfigur tanpa kod) ---------- */
+async function saveSettings(){
+  const me=currentUser();if(!me||me.role!=='admin')return toast('Akses admin sahaja','err');
+  const g=id=>parseFloat($('#'+id).value);
+  const s={baseRate:g('stBase'),highRate:g('stHigh'),weekdayThreshold:g('stWk'),weekendThreshold:g('stWknd'),monthlySalesThreshold:g('stMon'),perfBonus:g('stPerf'),attBonus:g('stAtt'),typhoidAllowance:g('stTyph'),typhoidMax:Math.round(g('stTyphMax')),maxPerShift:Math.max(1,Math.round(g('stMax'))),shiftHours:g('stHrs'),allowStaffSales:$('#stStaffSales').checked};
+  if([s.baseRate,s.highRate,s.weekdayThreshold,s.weekendThreshold,s.monthlySalesThreshold,s.perfBonus,s.attBonus,s.typhoidAllowance,s.typhoidMax,s.shiftHours].some(v=>isNaN(v)||v<0)||s.baseRate<=0||s.shiftHours<=0)
+    return toast('Nilai tetapan tidak sah','err');
+  const {error}=await SB.from('settings').update({base_rate:s.baseRate,high_rate:s.highRate,weekday_threshold:s.weekdayThreshold,weekend_threshold:s.weekendThreshold,monthly_sales_threshold:s.monthlySalesThreshold,perf_bonus:s.perfBonus,att_bonus:s.attBonus,typhoid_allowance:s.typhoidAllowance,typhoid_max:s.typhoidMax,max_per_shift:s.maxPerShift,shift_hours:s.shiftHours,allow_staff_sales:s.allowStaffSales,updated_at:new Date().toISOString()}).eq('id',1);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('settings_update','kadar/bonus dikemaskini');
+  await sync();render();toast('Tetapan disimpan ✔','ok');}
+
+/* ---------- 12. TOAST & MODAL ---------- */
+function toast(msg,type){const w=$('#toastWrap');if(!w)return;const el=document.createElement('div');
+  el.className='toast '+(type||'info');el.textContent=msg;w.appendChild(el);
+  setTimeout(()=>{el.classList.add('out');setTimeout(()=>el.remove(),450)},3800);}
+function openModal(title,bodyHTML){const r=$('#modalRoot');
+  r.innerHTML='<div class="modal glass"><div class="modal-head"><h3>'+title+'</h3><button class="iconbtn" onclick="closeModal()" aria-label="Tutup">✕</button></div><div class="modal-body">'+bodyHTML+'</div></div>';
+  r.classList.add('open');}
+function closeModal(){const r=$('#modalRoot');r.classList.remove('open');r.innerHTML='';}
+function modalBackdrop(e){if(e.target.id==='modalRoot')closeModal();}
+
+/* ---------- 13. ROUTER ---------- */
+let ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};
+function render(){
+  const app=$('#app');
+  if(ROUTE.view==='setup'){app.innerHTML=setupHTML();return}
+  if(ROUTE.view==='landing'){app.innerHTML=landingHTML();}
+  else if(ROUTE.view==='login'){app.innerHTML=loginHTML();renderDots();}
+  else{const u=currentUser();
+    if(!u){ROUTE.view='landing';return render();}
+    if(u.role==='staff'){ROUTE.view='staff';renderStaffShell();}
+    else{ROUTE.view='manager';renderManagerShell();}}
+}
+function goLogin(p){ROUTE={view:'login',portal:p,tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};pinBuf='';render();}
+function goBackLanding(){ROUTE.view='landing';render();}
+function setTab(t){ROUTE.tab=t;render()}
+function setMTab(t){ROUTE.mtab=t;render()}
+async function calNav(d){ROUTE.mk=shiftMonth(ROUTE.mk||monthKey(todayStr()),d);await loadSlotCounts(ROUTE.mk);render()}
+function bNav(d){ROUTE.bmk=shiftMonth(ROUTE.bmk,d);render()}
+function sNav(d){ROUTE.smk=shiftMonth(ROUTE.smk,d);render()}
+function pNav(d){ROUTE.pmk=shiftMonth(ROUTE.pmk,d);render()}
+function defaultBookMonth(){const c=monthKey(todayStr());return monthPublished(c)?shiftMonth(c,1):c}
+
+/* ---------- 14. LOG MASUK (PRD 5.1 — PIN + keypad besar) ---------- */
+let pinBuf='',failCount=0,lockUntil=0;
+function renderDots(){const w=$('#pinDots');if(!w)return;
+  w.innerHTML=Array.from({length:6},(_,i)=>'<span class="dot'+(i<pinBuf.length?' on':'')+'"></span>').join('');}
+function keyPress(k){if(pinBuf.length>=6)return;pinBuf+=k;renderDots()}
+function keyBack(){pinBuf=pinBuf.slice(0,-1);renderDots()}
+function clearPin(){pinBuf='';renderDots()}
+document.addEventListener('keydown',e=>{
+  if(ROUTE.view!=='login')return;
+  if(e.target&&e.target.tagName==='INPUT')return;
+  if(/^[0-9]$/.test(e.key)){keyPress(e.key);e.preventDefault()}
+  else if(e.key==='Backspace'){keyBack();e.preventDefault()}
+  else if(e.key==='Enter'){doLogin()}
+});
+function mapAuthErr(e,left){
+  const m=(e&&e.message)||'';
+  if(/Invalid login credentials/i.test(m))return 'ID atau PIN salah. ('+left+' percubaan lagi)';
+  if(/rate|security purposes|too many/i.test(m))return '🔒 Terlalu banyak percubaan — tunggu sebentar (perlindungan Supabase Auth).';
+  if(/not confirmed/i.test(m))return 'Akaun belum disahkan — hubungi manager.';
+  return m||'Log masuk gagal';
+}
+async function doLogin(){
+  const username=($('#loginUser').value||'').trim().toLowerCase(),pin=pinBuf,err=$('#loginErr');
+  const showErr=m=>{err.textContent=m;err.style.display='block';err.classList.add('shake');setTimeout(()=>err.classList.remove('shake'),450)};
+  if(!username||pin.length<4)return showErr('Sila masukkan ID dan PIN (4–6 digit).');
+  if(Date.now()<lockUntil)return showErr('🔒 Cuba lagi dalam '+Math.ceil((lockUntil-Date.now())/1000)+' saat.');
+  const portal=ROUTE.portal==='staff'?'staff':'manager';
+  /* PIN = kata laluan Supabase Auth (bcrypt di server); suffix menjaga syarat min 6 aksara */
+  const {data,error}=await SB.auth.signInWithPassword({email:username+'@soobeh.app',password:pin+'-soobeh'});
+  if(error){
+    failCount++;
+    if(failCount>=5){lockUntil=Date.now()+60000;failCount=0;showErr('🔒 Terlalu banyak percubaan gagal — terkunci 60 saat.')}
+    else showErr(mapAuthErr(error,5-failCount));
+    pinBuf='';renderDots();return;
+  }
+  failCount=0;
+  const {data:prof}=await SB.from('profiles').select('*').eq('id',data.user.id).single();
+  if(!prof||prof.active===false){await SB.auth.signOut();return showErr('Profil tidak aktif atau tidak dijumpai. Hubungi manager.');}
+  if(portal==='staff'&&prof.role!=='staff'){await SB.auth.signOut();return showErr('Akaun ini perlu log masuk melalui Portal Manager.');}
+  if(portal==='manager'&&prof.role==='staff'){await SB.auth.signOut();return showErr('Akaun ini perlu log masuk melalui Portal Staff.');}
+  ME=mapProfile(prof);
+  ROUTE={view:prof.role==='staff'?'staff':'manager',portal:portal,tab:'cal',mtab:'dash',mk:monthKey(todayStr()),bmk:null,smk:null,pmk:null,saleEdit:null};
+  await loadAll();
+  await logAudit('login',ME.username+' log masuk ('+ME.role+')');
+  pinBuf='';
+  render();toast('Selamat datang, '+ME.name.split(' ')[0]+'! 👋','ok');
+}
+
+/* ---------- 15. SKRIN UTAMA & LOG MASUK ---------- */
+function setupHTML(){return '<div class="loginwrap"><div class="loginbox glass"><div class="logo big">⚙️</div><h2>Tetapan Diperlukan</h2><p style="opacity:.8">Fail <b>config.js</b> belum dikonfigurasi.</p><ol style="text-align:left;opacity:.85"><li>Buka akaun Supabase anda → <b>Settings → API</b></li><li>Salin <b>Project URL</b> &amp; <b>anon public key</b></li><li>Tampal ke dalam <b>config.js</b></li><li>Muat naik semula ke GitHub — Vercel akan auto-deploy semula</li></ol></div></div>';}
+function landingHTML(){return '<div class="landing">'+
+ '<div class="hero glass"><div class="logo big">S</div><h1>Soobeh Kiosk</h1>'+
+ '<p>Sistem Jadual Syif, Pertukaran Syif &amp; Pengiraan Gaji</p>'+
+ '<div class="badges"><span class="chip chip-info">☁️ Supabase Database</span><span class="chip chip-info">🔐 RLS + Auth berenkripsi</span><span class="chip chip-info">📱 Mobile-first</span><span class="chip chip-info">🧾 Slip gaji PDF</span></div></div>'+
+ '<div class="portalgrid">'+
+ '<button class="portal glass" onclick="goLogin(\'staff\')"><div class="p-ic">👷</div><h2>Portal Staff</h2><p>Tempah syif · lihat jadual · mohon tukar syif · slip gaji</p><span class="btn btn-primary">Log Masuk →</span></button>'+
+ '<button class="portal glass" onclick="goLogin(\'manager\')"><div class="p-ic">👔</div><h2>Portal Manager</h2><p>Sahkan jadual · input jualan · lulus tukar syif · jana gaji</p><span class="btn btn-primary">Log Masuk →</span></button></div>'+
+ '<p class="foot">Soobeh Shift &amp; Payroll System · Fasa 1 · v1.0 · Data disimpan di Supabase (cloud)</p></div>';}
+function loginHTML(){const st=ROUTE.portal==='staff';
+ return '<div class="loginwrap"><button class="btn btn-sm ghost" onclick="goBackLanding()">← Kembali</button>'+
+ '<div class="loginbox glass"><div class="logo big">'+(st?'👷':'👔')+'</div><h2>'+(st?'Portal Staff':'Portal Manager / Admin')+'</h2>'+
+ '<label class="field" style="text-align:left"><span>ID Pekerja / Username</span><input id="loginUser" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cth: '+(st?'ali01':'aida05')+'"></label>'+
+ '<div class="field" style="text-align:left"><span>PIN (4–6 digit)</span><div class="pin-dots" id="pinDots"></div></div>'+
+ '<div class="keypad">'+[1,2,3,4,5,6,7,8,9].map(n=>'<button class="key" onclick="keyPress(\''+n+'\')">'+n+'</button>').join('')+
+ '<button class="key" onclick="clearPin()">C</button><button class="key" onclick="keyPress(\'0\')">0</button><button class="key" onclick="keyBack()">⌫</button></div>'+
+ '<div id="loginErr" class="loginerr"></div>'+
+ '<button class="btn btn-primary btn-big" onclick="doLogin()">🔐 Log Masuk</button>'+
+ '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div>'+
+ '<details class="demo glass"><summary>🔑 Akaun Demo (untuk ujian)</summary><div class="inner">'+
+ '<div class="tblwrap"><table class="tbl"><tr><th>Peranan</th><th>ID</th><th>PIN</th></tr>'+
+ '<tr><td>Staff (Bulanan)</td><td>ali01</td><td>1234</td></tr><tr><td>Staff (2-Minggu)</td><td>minah02</td><td>1111</td></tr>'+
+ '<tr><td>Staff (2-Minggu)</td><td>chong03</td><td>2222</td></tr><tr><td>Staff (Bulanan)</td><td>sarah04</td><td>3333</td></tr>'+
+ '<tr><td>Manager</td><td>aida05</td><td>9999</td></tr><tr><td>Manager</td><td>boyan06</td><td>8888</td></tr>'+
+ '<tr><td>Manager</td><td>ravi07</td><td>7777</td></tr><tr><td>Admin (Pengusaha)</td><td>boss00</td><td>0000</td></tr></table></div>'+
+ '<small>Dipaparkan untuk ujian demo sahaja — dalam produksi, senarai ini perlu dibuang dan PIN dihantar secara peribadi. Untuk reset data demo: jalankan semula <b>01_schema.sql</b> + <b>02_seed.sql</b> di Supabase SQL Editor.</small></div></details></div>';}
+
+/* ---------- 16. PORTAL STAFF ---------- */
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
+function renderStaffShell(){
+  const u=currentUser();
+  const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
+  if(!tabs.some(t=>t.k===ROUTE.tab))ROUTE.tab='cal';
+  $('#app').innerHTML=
+  '<header class="appbar glass"><div class="brand"><div class="logo">S</div><div><b>Soobeh</b><small>'+esc(u.name)+'</small></div></div>'+
+  '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
+  '<main class="wrap"><div id="viewRoot"></div></main>'+
+  '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
+  ({cal:renderStaffCalendar,jad:renderStaffJadual,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
+}
+function slotPill(ds,shift,pub){
+  const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
+  if(pub){
+    const es=DB.schedule.filter(e=>e.date===ds&&e.shift===shift);
+    const mine=es.some(e=>e.staffId===ME.id);
+    mark=(mine?'✔':'')+(es.length||'');
+    cls=mine?'ok':(es.length?'taken':'none');
+  }else{
+    const mine=DB.bookings.find(b=>b.date===ds&&b.shift===shift&&b.staffId===ME.id);
+    const n=DB.slotCounts[ds+'|'+shift]||0; /* kiraan rakan — tanpa nama (RPC slot_counts) */
+    mark=(mine?(mine.status==='rejected'?'✕':'✔'):'')+(n||'');
+    cls=mine?(mine.status==='approved'?'ok':mine.status==='pending'?'wait':'no'):(n?'taken':'free');
+  }
+  return '<button class="slot st-'+cls+'" onclick="openSlot(\''+ds+'\',\''+shift+'\')"><span>'+ic+'</span><b>'+(mark||'·')+'</b></button>';
+}
+function renderStaffCalendar(){
+  const u=currentUser();
+  if(!ROUTE.mk)ROUTE.mk=monthKey(todayStr());
+  const mk=ROUTE.mk,pub=monthPublished(mk);
+  let cells='';['Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu','Ahad'].forEach(d=>cells+='<div class="cal-dow">'+d.slice(0,3)+'</div>');
+  const p=mk.split('-'),off=(new Date(+p[0],+p[1]-1,1).getDay()+6)%7,dim=daysInMonth(mk);
+  for(let i=0;i<off;i++)cells+='<div class="cal-cell blank"></div>';
+  for(let d=1;d<=dim;d++){const ds=mk+'-'+pad2(d),past=ds<todayStr();
+    cells+='<div class="cal-cell'+(past?' past':'')+'"><div class="cal-day">'+d+'</div>'+slotPill(ds,'morning',pub)+slotPill(ds,'evening',pub)+'</div>';}
+  const est=estimateFor(u.id);
+  $('#viewRoot').innerHTML=
+  '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
+  (pub?'<div class="notice ok">🔒 Jadual rasmi telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
+      :'<div class="notice info">💡 Tekan slot untuk menempah. Status: <span class="chip chip-wait">Menunggu Kelulusan</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> — had '+DB.settings.maxPerShift+' staff/syif.</div>')+
+  '<div class="cal-grid glass">'+cells+'</div>'+
+  '<div class="card glass"><h3>Ringkasan Bulan Semasa</h3><div class="statrow">'+
+  '<div class="stat"><small>Syif (bulan ini)</small><b>'+est.c.shifts.length+'</b></div>'+
+  '<div class="stat"><small>Jam bekerja</small><b>'+est.c.totalHours+'</b></div>'+
+  '<div class="stat"><small>Anggaran gaji</small><b>'+rm(est.total)+'</b></div></div>'+
+  '<p class="hint">Anggaran termasuk bonus/elaun jika terus layak hingga akhir bulan. Slip rasmi dijana oleh manager pada akhir kitaran anda.</p></div>';
+}
+function bookingChip(st){return st==='approved'?'<span class="chip chip-ok">Disahkan</span>':st==='pending'?'<span class="chip chip-wait">Menunggu Kelulusan</span>':'<span class="chip chip-no">Tidak Dipilih</span>'}
+function openSlot(ds,shift){
+  const u=currentUser(),pub=monthPublished(monthKey(ds)),past=ds<todayStr();
+  const shName=shift==='morning'?'Syif Pagi · 10:00–16:00':'Syif Petang · 16:00–22:00';
+  let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div><div class="detailrow"><span>Syif</span><b>'+shName+'</b></div>';
+  if(pub){
+    const es=DB.schedule.filter(e=>e.date===ds&&e.shift===shift),mine=es.find(e=>e.staffId===u.id);
+    const sale=getSale(ds,shift);
+    body+='<div class="detailrow"><span>Status jadual rasmi</span><b>'+(mine?'<span class="chip chip-ok">✔ Anda disahkan</span>':'Dikhaskan untuk '+es.length+' staff')+'</b></div>';
+    if(past&&sale!=null){const rate=shiftRate(ds,shift,sale);
+      body+='<div class="detailrow"><span>Jualan syif ini</span><b>'+rm(sale)+'</b></div><div class="detailrow"><span>Kadar gaji syif ini</span><b>'+rm2(rate)+'/jam'+(rate>DB.settings.baseRate?' ⚡':'')+'</b></div>';}
+    if(mine&&!past)body+='<button class="btn btn-primary btn-big" onclick="closeModal();openSwapModal(\''+mine.id+'\')">🔄 Mohon Tukar Syif Ini</button>';
+  }else if(past){
+    body+='<div class="notice">Tarikh lampau — tempahan telah tertutup.</div>';
+  }else{
+    const n=DB.slotCounts[ds+'|'+shift]||0;
+    const mine=DB.bookings.find(b=>b.date===ds&&b.shift===shift&&b.staffId===u.id);
+    body+='<div class="detailrow"><span>Tempahan slot ini (termasuk anda)</span><b>'+n+' daripada maks '+DB.settings.maxPerShift+'</b></div>';
+    if(mine&&(mine.status==='pending'||mine.status==='approved')){
+      body+='<div class="detailrow"><span>Tempahan anda</span><b>'+bookingChip(mine.status)+'</b></div>';
+      if(mine.status==='pending')body+='<button class="btn btn-danger btn-big" onclick="cancelBooking(\''+mine.id+'\')">✕ Batalkan Tempahan Saya</button>';
+    }else if(n>=DB.settings.maxPerShift){
+      body+='<div class="notice warn">Slot ini telah penuh (had '+DB.settings.maxPerShift+' staff).</div>';
+    }else{
+      body+='<button class="btn btn-ok btn-big" onclick="bookSlot(\''+ds+'\',\''+shift+'\')">'+(mine?' Tempah Semula':'✔ Tempah Syif Ini')+'</button>';
+    }
+  }
+  openModal('Butiran Slot',body);
+}
+function renderStaffJadual(){
+  const u=currentUser(),S=DB.settings;
+  const sched=DB.schedule.filter(e=>e.staffId===u.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const months=[...new Set(sched.map(e=>e.monthKey))].sort((a,b)=>b.localeCompare(a));
+  let html='<div class="pagehead"><h2>🗓️ Jadual Saya</h2></div>';
+  const open=DB.bookings.filter(b=>b.staffId===u.id&&!monthPublished(monthKey(b.date))).sort((a,b)=>a.date.localeCompare(b.date));
+  if(open.length)html+='<div class="card glass"><h3>Permohonan Belum Dikeluarkan</h3>'+open.map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip(b.status)+'</div>').join('')+'<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi.</p></div>';
+  months.forEach(mk=>{
+    html+='<div class="card glass"><h3>'+monthLabel(mk)+' · Jadual Rasmi</h3>';
+    sched.filter(e=>e.monthKey===mk).forEach(e=>{
+      const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null,past=e.date<todayStr();
+      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10–4':'🌙 Petang 4–10')+'</span>'+
+      (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
+      (past&&sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':past?'<span class="chip chip-wait">Jualan belum dimasukkan</span>':'')+'</div></div>'+
+      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(S.shiftHours*rate)+'</b>':'')+'</div>';
+    });
+    html+='</div>';
+  });
+  if(!sched.length&&!open.length)html+='<div class="card glass"><p style="opacity:.75">Belum ada jadual. Mulakan dengan menempah syif di Kalendar 📅</p></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderStaffSwap(){
+  const u=currentUser();
+  const inc=DB.swaps.filter(s=>s.toStaffId===u.id&&s.status==='pending_peer');
+  const mine=DB.swaps.filter(s=>s.fromStaffId===u.id).sort((a,b)=>b.t-a.t);
+  const hist=DB.swaps.filter(s=>s.toStaffId===u.id&&s.status!=='pending_peer').sort((a,b)=>b.t-a.t);
+  let html='<div class="pagehead"><h2>🔄 Pertukaran Syif</h2><button class="btn btn-primary btn-sm" onclick="openSwapModal()">✚ Mohon Tukar</button></div>'+
+  '<div class="notice info">Aliran: <b>1) Rakan bersetuju</b> → <b>2) Manager luluskan</b> → jadual dikemaskini automatik + rekod audit penuh (diproses di server).</div>';
+  if(inc.length)html+='<h3 class="sect">Permintaan Kepada Anda ('+inc.length+')</h3>'+inc.map(s=>swapCardHTML(s,'<div class="chips" style="margin-top:10px"><button class="btn btn-ok" onclick="peerRespond(\''+s.id+'\',true)">✔ Terima</button><button class="btn btn-danger" onclick="peerRespond(\''+s.id+'\',false)">✕ Tolak</button></div>')).join('');
+  if(mine.length)html+='<h3 class="sect">Permohonan Saya</h3>'+mine.map(s=>swapCardHTML(s,'')).join('');
+  if(hist.length)html+='<h3 class="sect">Sejarah (kepada anda)</h3>'+hist.map(s=>swapCardHTML(s,'')).join('');
+  if(!inc.length&&!mine.length&&!hist.length)html+='<div class="card glass"><p style="opacity:.75">Belum ada permohonan pertukaran. Tekan <b>✚ Mohon Tukar</b> untuk mula.</p></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderStaffSlips(){
+  const u=currentUser(),S=DB.settings,est=estimateFor(u.id);
+  const slips=DB.payslips.filter(p=>p.staffId===u.id).sort((a,b)=>b.start.localeCompare(a.start));
+  let html='<div class="pagehead"><h2>🧾 Slip Gaji Saya</h2></div>'+
+  '<div class="card glass"><h3>📊 Anggaran Bulan Ini <small>(setakat '+dShort(todayStr())+')</small></h3>'+
+  '<div class="detailrow"><span>Syif &amp; jam</span><b>'+est.c.shifts.length+' syif · '+est.c.totalHours+' jam</b></div>'+
+  '<div class="detailrow"><span>Gaji asas + kadar tinggi</span><b>'+rm(est.c.basePay+est.c.extraPay)+'</b></div>'+
+  '<div class="detailrow"><span>Bonus prestasi <small>(jualan '+rm(est.perf.sum)+')</small></span><b>'+(est.perf.ok?rm(S.perfBonus)+' ✔':'— belum layak')+'</b></div>'+
+  '<div class="detailrow"><span>Bonus kehadiran</span><b>'+(est.att.ok?rm(S.attBonus)+' ✔':'— '+esc(est.att.why||''))+'</b></div>'+
+  '<div class="detailrow"><span>Elaun typhoid</span><b>'+(u.typhoidCount<S.typhoidMax?rm(S.typhoidAllowance)+' ('+(u.typhoidCount+1)+'/'+S.typhoidMax+')':'— ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)')+'</b></div>'+
+  '<div class="ps-totalbox"><span>ANGGARAN JUMLAH</span><span>'+rm(est.total)+'</span></div>'+
+  '<p class="hint">Anggaran masa nyata (ciri tambahan) — slip rasmi dijana oleh manager pada akhir kitaran anda ('+(u.payCycle==='monthly'?'bulanan':'2-mingguan')+').</p></div>'+
+  '<div class="card glass"><h3>Sejarah Slip Rasmi</h3>'+
+  (slips.length?slips.map(p=>'<div class="brow" style="cursor:pointer" onclick="viewSlip(\''+p.id+'\')"><div><b>'+dShort(p.start)+' – '+dShort(p.end)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(p.cycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip chip-ok">'+p.shiftCount+' syif · '+p.hours+' jam</span><span class="chip">💉 '+(p.typh?'bayaran '+p.typhNo+'/'+S.typhoidMax:'—')+'</span></div></div><b class="amt">'+rm(p.total)+'</b></div>').join(''):'<p style="opacity:.75">Belum ada slip dijana untuk anda lagi.</p>')+
+  '<p class="hint">Tekan mana-mana slip untuk butiran penuh &amp; muat turun PDF.</p></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderStaffProfile(){
+  const u=currentUser();
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>👤 Profil Saya</h2></div>'+
+  '<div class="card glass"><h3>Maklumat</h3>'+
+  '<div class="detailrow"><span>Nama</span><b>'+esc(u.name)+'</b></div>'+
+  '<div class="detailrow"><span>ID Pekerja</span><b>'+esc(u.username)+'</b></div>'+
+  '<div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
+  '<div class="detailrow"><span>Kitaran gaji</span><b><span class="chip chip-info">'+(u.payCycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</span></b></div>'+
+  '<div class="detailrow"><span>Elaun typhoid</span><b>'+u.typhoidCount+'/'+DB.settings.typhoidMax+' kali telah dibayar</b></div></div>'+
+  '<div class="card glass"><h3>Tukar PIN</h3>'+
+  '<label class="field"><span>PIN semasa</span><input id="pinCur" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<label class="field"><span>Sahkan PIN baharu</span><input id="pinNew2" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="changeMyPin()">🔑 Simpan PIN Baharu</button>'+
+  '<p class="hint">PIN disimpan sebagai hash bcrypt di server Supabase Auth — bukan teks biasa.</p></div>'+
+  '<button class="btn btn-danger btn-big" onclick="logout()">⏻ Log Keluar</button>';
+}
+
+/* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual Rasmi'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'}];
+function openProfileModal(){const u=currentUser();
+  openModal('👤 Profil — '+esc(u.name),
+  '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
+  '<h3 style="margin-top:14px">Tukar PIN</h3>'+
+  '<label class="field"><span>PIN semasa</span><input id="pinCur" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<label class="field"><span>Sahkan PIN baharu</span><input id="pinNew2" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="changeMyPin()">Simpan PIN Baharu</button>');}
+function renderManagerShell(){
+  const u=currentUser();
+  const tabs=MTABS.slice();if(u.role==='admin')tabs.push({k:'tetap',ic:'⚙️',lb:'Tetapan'},{k:'log',ic:'📜',lb:'Log'});
+  if(!tabs.some(t=>t.k===ROUTE.mtab))ROUTE.mtab='dash';
+  $('#app').innerHTML=
+  '<header class="appbar glass"><div class="brand"><div class="logo">M</div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
+  '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
+  '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,gaji:renderMPayroll,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+}
+function salesChartHTML(){
+  const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
+  const data=days.map(ds=>({ds:ds,m:getSale(ds,'morning')||0,e:getSale(ds,'evening')||0}));
+  const max=Math.max(1,...data.map(x=>Math.max(x.m,x.e)));
+  return '<div class="chart">'+data.map(x=>'<div class="chart-col" title="'+x.ds+' · Pagi RM '+x.m.toFixed(0)+' / Petang RM '+x.e.toFixed(0)+'"><div class="bars"><div class="bar bm" style="height:'+Math.max(3,x.m/max*100)+'%"></div><div class="bar be" style="height:'+Math.max(3,x.e/max*100)+'%"></div></div><small>'+(+x.ds.slice(8,10))+'</small></div>').join('')+'</div>';
+}
+function renderMDash(){
+  const mk=monthKey(todayStr()),S=DB.settings;
+  const staff=DB.users.filter(u=>u.role==='staff'&&u.active!==false);
+  const pendB=DB.bookings.filter(b=>b.status==='pending'&&!monthPublished(monthKey(b.date))).length;
+  const swP=DB.swaps.filter(s=>s.status==='pending_peer').length;
+  const swM=DB.swaps.filter(s=>s.status==='pending_manager').length;
+  let est=0;
+  const rows=staff.map(u=>{const sc=scheduledEntries(u.id,mk),att=sc.filter(e=>!e.noShow).length;est+=estimateFor(u.id).total;return {u:u,sc:sc.length,att:att,hours:att*S.shiftHours}});
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📊 Dashboard Manager</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
+  '<div class="statgrid">'+
+  '<div class="card glass"><h3>📅 Kehadiran Bulan Semasa <small>+ penanda kitaran gaji (PRD 5.6a)</small></h3><div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Kitaran</th><th>Syif</th><th>Hadir</th><th>Jam</th></tr>'+
+  rows.map(r=>'<tr><td>'+esc(r.u.name)+'</td><td><span class="chip '+(r.u.payCycle==='monthly'?'chip-ok':'chip-wait')+'">'+(r.u.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span></td><td>'+r.sc+'</td><td>'+r.att+'</td><td>'+r.hours+'</td></tr>').join('')+'</table></div></div>'+
+  '<div class="card glass"><h3>💰 Anggaran Gaji Bulan Semasa</h3><div class="bigtotal">'+rm(est)+'</div><p class="hint">Anggaran setakat hari ini — termasuk bonus &amp; elaun jika kekal layak hingga akhir bulan.</p>'+
+  '<div class="chips" style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="setMTab(\'gaji\')">🧾 Jana Slip</button><button class="btn btn-sm" onclick="setMTab(\'jual\')">💰 Input Jualan</button></div></div>'+
+  '<div class="card glass"><h3>⏳ Permohonan Tertunggak</h3>'+
+  '<div class="detailrow"><span>Tempahan menunggu pengesahan</span><b>'+pendB+' <button class="btn btn-sm" onclick="setMTab(\'temp\')">Semak →</button></b></div>'+
+  '<div class="detailrow"><span>Tukar syif menunggu manager</span><b>'+swM+' <button class="btn btn-sm" onclick="setMTab(\'tukar\')">Semak →</button></b></div>'+
+  '<div class="detailrow"><span>Tukar syif menunggu rakan</span><b>'+swP+'</b></div></div></div>'+
+  '<div class="card glass"><h3>📈 Jualan 14 Hari Lepas (mengikut syif)</h3>'+salesChartHTML()+
+  '<div class="chips" style="margin-top:8px"><span class="chip" style="background:rgba(251,191,36,.2)">☀ Pagi</span><span class="chip" style="background:rgba(129,140,248,.2)">🌙 Petang</span></div></div>';
+}
+function renderMBookings(){
+  if(!ROUTE.bmk)ROUTE.bmk=defaultBookMonth();
+  const mk=ROUTE.bmk,pub=monthPublished(mk);
+  let html='<div class="pagehead"><h2>✅ Pengesahan &amp; Penjadualan</h2><div class="monthnav glass"><button onclick="bNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="bNav(1)">▶</button></div></div>';
+  if(pub){
+    html+='<div class="notice ok">🔒 Jadual '+monthLabel(mk)+' telah dikeluarkan pada '+new Date(DB.published[mk].t).toLocaleDateString('ms-MY')+' oleh '+esc(DB.published[mk].by||'')+'. Ia dikunci — perubahan hanya melalui Pertukaran Syif.</div>'+
+    '<button class="btn btn-primary" onclick="setMTab(\'jad\')">🗓️ Lihat Jadual Rasmi</button>';
+  }else{
+    const bks=DB.bookings.filter(b=>monthKey(b.date)===mk);
+    const pend=bks.filter(b=>b.status==='pending').length,ap=bks.filter(b=>b.status==='approved').length;
+    html+='<div class="notice info">📊 '+pend+' menunggu kelulusan · '+ap+' disahkan · had '+DB.settings.maxPerShift+' staff/syif (boleh diubah di Tetapan).</div>';
+    const byDate={};bks.forEach(b=>{(byDate[b.date]=byDate[b.date]||[]).push(b)});
+    const order={approved:0,pending:1,rejected:2};
+    const dates=Object.keys(byDate).sort();
+    if(!dates.length)html+='<div class="card glass"><p style="opacity:.75">Tiada permohonan tempahan untuk bulan ini.</p></div>';
+    dates.forEach(ds=>{
+      let rows='';
+      ['morning','evening'].forEach(sh=>{
+        const sl=byDate[ds].filter(b=>b.shift===sh).sort((a,b)=>order[a.status]-order[b.status]);
+        if(!sl.length)return;
+        const apN=sl.filter(b=>b.status==='approved').length;
+        rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi (10:00–16:00)':'🌙 Syif Petang (16:00–22:00)')+' <span class="chip '+(apN>=DB.settings.maxPerShift?'chip-warn':'chip-info')+'">'+apN+'/'+DB.settings.maxPerShift+' disahkan</span></div>';
+        sl.forEach(b=>{
+          const st=DB.users.find(x=>x.id===b.staffId);
+          rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b><div class="brow-act">'+bookingChip(b.status)+
+          (b.status==='pending'?'<button class="btn btn-sm btn-ok" onclick="mgrSetBooking(\''+b.id+'\',\'approved\')">✔ Sahkan</button><button class="btn btn-sm btn-danger" onclick="mgrSetBooking(\''+b.id+'\',\'rejected\')">✕ Tolak</button>'
+           :b.status==='approved'?'<button class="btn btn-sm" onclick="mgrSetBooking(\''+b.id+'\',\'pending\')">↩ Batal</button>'
+           :'<button class="btn btn-sm" onclick="mgrSetBooking(\''+b.id+'\',\'pending\')">↩ Pulihkan</button>')+'</div></div>';
+        });
+        rows+='</div>';
+      });
+      html+='<div class="card glass"><h3>'+fmtDateDS(ds)+' '+(isWeekend(ds)?'<span class="chip chip-info">Weekend</span>':'')+(ds<todayStr()?' <span class="chip chip-no">Lampau</span>':'')+'</h3>'+rows+'</div>';
+    });
+    html+='<button class="btn btn-primary btn-big" onclick="confirmPublish()">🔒 Keluarkan Jadual '+monthLabel(mk)+'</button>';
+  }
+  $('#viewRoot').innerHTML=html;
+}
+function renderMSchedule(){
+  if(!ROUTE.smk){const c=monthKey(todayStr());ROUTE.smk=monthPublished(c)?c:shiftMonth(c,-1)}
+  const mk=ROUTE.smk,S=DB.settings;
+  let html='<div class="pagehead"><h2>🗓️ Jadual Rasmi &amp; Kehadiran</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
+  if(!monthPublished(mk)){html+='<div class="notice warn">Jadual '+monthLabel(mk)+' belum dikeluarkan. Sahkan tempahan dahulu di tab Tempahan.</div>'}
+  else{
+    const es=DB.schedule.filter(e=>e.monthKey===mk).sort((a,b)=>a.date.localeCompare(b.date));
+    const byDate={};es.forEach(e=>{(byDate[e.date]=byDate[e.date]||[]).push(e)});
+    Object.keys(byDate).sort().forEach(ds=>{
+      let rows='';
+      ['morning','evening'].forEach(sh=>{
+        const sl=byDate[ds].filter(e=>e.shift===sh);if(!sl.length)return;
+        const sale=getSale(ds,sh),rate=sale!=null?shiftRate(ds,sh,sale):null;
+        rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi':'🌙 Syif Petang')+
+        ' '+(sale!=null?'<span class="chip '+(rate>S.baseRate?'chip-ok':'chip-info')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div>';
+        sl.forEach(e=>{
+          const st=DB.users.find(u=>u.id===e.staffId);
+          rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b> '+(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
+          '<div class="brow-act"><button class="btn btn-sm '+(e.noShow?'btn-ok':'btn-danger')+'" onclick="toggleNoShow(\''+e.id+'\')">'+(e.noShow?'↩ Tanda Hadir':'✕ Tanda Tidak Hadir')+'</button></div></div>';
+        });
+        rows+='</div>';
+      });
+      html+='<div class="card glass"><h3>'+fmtDateDS(ds)+' '+(isWeekend(ds)?'<span class="chip chip-info">Weekend</span>':'')+(ds<todayStr()?' <span class="chip chip-no">Lampau</span>':'')+'</h3>'+rows+'</div>';
+    });
+    if(!es.length)html+='<div class="card glass"><p style="opacity:.75">Tiada rekod jadual bulan ini.</p></div>';
+    html+='<p class="hint">Tanda "Tidak Hadir" mengikut kehadiran sebenar — jam &amp; bonus kehadiran staff tersebut akan terjejas dalam enjin gaji (rekod audit disimpan).</p>';
+  }
+  $('#viewRoot').innerHTML=html;
+}
+function renderSales(){
+  const me=currentUser();
+  if(!me)return;
+  if(!(['manager','admin'].includes(me.role)||DB.settings.allowStaffSales)){$('#viewRoot').innerHTML='<div class="notice warn">Input jualan oleh staff tidak dibenarkan (tetapan Admin).</div>';return}
+  const S=DB.settings,edit=ROUTE.saleEdit;
+  const sales=DB.sales.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,40);
+  const mk=monthKey(todayStr()),mTotal=DB.sales.filter(s=>monthKey(s.date)===mk).reduce((a,s)=>a+s.amount,0);
+  let html='<div class="pagehead"><h2>💰 Input Jualan Harian (mengikut syif)</h2></div>'+
+  '<div class="card glass"><h3>'+(edit?'Kemaskini Rekod Jualan':'Rekod Baharu')+'</h3>'+
+  (edit?'<div class="notice info">Mengemaskini: '+fmtDateDS(edit.date)+' · '+(edit.shift==='morning'?'Pagi':'Petang')+' <button class="btn btn-sm" onclick="ROUTE.saleEdit=null;render()">✚ Rekod Baharu</button></div>':'')+
+  '<div class="formgrid">'+
+  '<label class="field"><span>Tarikh</span><input type="date" id="saleDate" max="'+todayStr()+'" value="'+(edit?edit.date:todayStr())+'"></label>'+
+  '<label class="field"><span>Syif</span><select id="saleShift"><option value="morning"'+(edit&&edit.shift==='morning'?' selected':'')+'>☀ Syif Pagi (10:00–16:00)</option><option value="evening"'+(edit&&edit.shift==='evening'?' selected':'')+'>🌙 Syif Petang (16:00–22:00)</option></select></label>'+
+  '<label class="field"><span>Jumlah jualan (RM)</span><input type="number" id="saleAmt" min="0" step="0.01" placeholder="cth: 350.00" value="'+(edit&&getSale(edit.date,edit.shift)!=null?getSale(edit.date,edit.shift):'')+'"></label></div>'+
+  '<button class="btn btn-primary btn-big" onclick="setSaleSubmit()">💾 Simpan Jualan</button>'+
+  '<p class="hint">Kadar RM'+S.highRate+'/jam diberi jika jualan syif melebihi '+rm(S.weekdayThreshold)+' (weekday) / '+rm(S.weekendThreshold)+' (weekend) — dinilai setiap syif. Julat amaun (0–99,999) turut dikuatkuasakan oleh database.</p></div>'+
+  '<div class="statrow"><div class="stat"><small>Jumlah jualan bulan semasa</small><b>'+rm(mTotal)+'</b></div></div>'+
+  '<div class="card glass"><h3>Rekod Terkini</h3>'+
+  (sales.length?sales.map(s=>{const rate=shiftRate(s.date,s.shift,s.amount);
+    return '<div class="brow"><div><b>'+dShort(s.date)+'</b> <span class="chip chip-info">'+(s.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span> <span class="chip '+(isWeekend(s.date)?'chip-wait':'chip-no')+'">'+(isWeekend(s.date)?'Weekend':'Weekday')+'</span></div>'+
+    '<div class="brow-act"><span class="chip '+(rate>S.baseRate?'chip-ok':'')+'">'+(rate>S.baseRate?'⚡ RM'+S.highRate+'/jam':'RM'+S.baseRate+'/jam')+'</span><b class="amt">'+rm(s.amount)+'</b><button class="btn btn-sm" onclick="editSale(\''+s.date+'\',\''+s.shift+'\')">✏️</button></div></div>'}).join(''):'<p style="opacity:.7">Tiada rekod lagi.</p>')+'</div>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderMSwaps(){
+  const pm=DB.swaps.filter(s=>s.status==='pending_manager');
+  const pp=DB.swaps.filter(s=>s.status==='pending_peer');
+  const hist=DB.swaps.filter(s=>!['pending_peer','pending_manager'].includes(s.status)).sort((a,b)=>b.t-a.t);
+  let html='<div class="pagehead"><h2>🔄 Kelulusan Pertukaran Syif</h2></div>';
+  html+=pm.length?'<h3 class="sect">Menunggu Kelulusan Anda ('+pm.length+')</h3>'+
+    pm.map(s=>swapCardHTML(s,'<div class="chips" style="margin-top:10px"><button class="btn btn-ok" onclick="mgrSwapDecide(\''+s.id+'\',true)">✔ Luluskan</button><button class="btn btn-danger" onclick="mgrSwapDecide(\''+s.id+'\',false)">✕ Tolak</button></div><p class="hint">⚠ Diluluskan = jadual dikemaskini automatik &amp; bonus kehadiran kedua-dua staff terbatal untuk bulan berkenaan (PRD 6.2). Semak sebab dahulu.</p>')).join(''):
+    '<div class="notice ok">✔ Tiada permohonan menunggu kelulusan manager.</div>';
+  if(pp.length)html+='<h3 class="sect">Menunggu Persetujuan Rakan ('+pp.length+')</h3>'+pp.map(s=>swapCardHTML(s,'')).join('');
+  if(hist.length)html+='<h3 class="sect">Sejarah Kelulusan</h3>'+hist.slice(0,12).map(s=>swapCardHTML(s,'')).join('');
+  $('#viewRoot').innerHTML=html;
+}
+function renderMPayroll(){
+  if(!ROUTE.pmk)ROUTE.pmk=monthKey(todayStr());
+  const mk=ROUTE.pmk,dim=daysInMonth(mk),S=DB.settings;
+  const monthly=DB.users.filter(u=>u.role==='staff'&&u.active!==false&&u.payCycle==='monthly');
+  const bi=DB.users.filter(u=>u.role==='staff'&&u.active!==false&&u.payCycle==='biweekly');
+  const slips=DB.payslips.filter(p=>p.monthKey===mk).sort((a,b)=>a.start.localeCompare(b.start)||a.staffName.localeCompare(b.staffName));
+  const slots=new Set(DB.schedule.filter(e=>e.monthKey===mk).map(e=>e.date+'|'+e.shift));
+  const withSales=new Set(DB.sales.filter(s=>monthKey(s.date)===mk).map(s=>s.date+'|'+s.shift));
+  const slipFor=(id,start)=>DB.payslips.find(p=>p.staffId===id&&p.start===start);
+  let html='<div class="pagehead"><h2>🧾 Jana Slip Gaji</h2><div class="monthnav glass"><button onclick="pNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="pNav(1)">▶</button></div></div>'+
+  '<div class="notice '+(withSales.size<slots.size?'warn':'ok')+'">📶 Jualan dimasukkan: '+withSales.size+'/'+slots.size+' slot bulan ini. '+(withSales.size<slots.size?'Slot tanpa jualan dikira pada kadar asas RM'+S.baseRate.toFixed(0)+'/jam — pastikan semua jualan dimasukkan sebelum jana untuk ketepatan 100%.':'')+'</div>';
+  if(monthly.length)html+='<div class="card glass"><h3>📅 Kumpulan Bulanan — 1 hingga '+dim+' ('+monthly.length+' staff)</h3>'+
+    monthly.map(u=>{const p=slipFor(u.id,mk+'-01');return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div>'+(p?'<span class="chip chip-ok">RM '+p.total.toFixed(2)+'</span>':'<span class="chip chip-wait">Belum dijana</span>')+'</div>'}).join('')+
+    '<button class="btn btn-primary btn-big" onclick="genPayslips(\'M\')">🧾 Jana Slip — Kitaran Bulanan</button></div>';
+  if(bi.length)html+='<div class="card glass"><h3>📅 Kumpulan 2-Minggu ('+bi.length+' staff)</h3>'+
+    bi.map(u=>{const p1=slipFor(u.id,mk+'-01'),p2=slipFor(u.id,mk+'-15');
+    return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div><div class="chips">'+(p1?'<span class="chip chip-ok">K1: RM '+p1.total.toFixed(2)+'</span>':'<span class="chip chip-wait">K1 belum</span>')+(p2?'<span class="chip chip-ok">K2: RM '+p2.total.toFixed(2)+'</span>':'<span class="chip chip-wait">K2 belum</span>')+'</div></div>'}).join('')+
+    '<div class="chips" style="margin:10px 0"><button class="btn btn-ok" style="flex:1;min-width:200px" onclick="genPayslips(\'B1\')">Jana Kitaran 1 (1–14)</button><button class="btn btn-ok" style="flex:1;min-width:200px" onclick="genPayslips(\'B2\')">Jana Kitaran 2 (15–'+dim+')</button></div>'+
+    '<p class="hint">Bonus prestasi &amp; kehadiran (dinilai bulanan) dimasukkan pada <b>Kitaran 2</b> sahaja bagi staff 2-mingguan — supaya tiada bonus dibayar dua kali atau pra-matang (PRD 5.6a / 6.4). Elaun typhoid diberi setiap kitaran (maks '+S.typhoidMax+' kali).</p></div>';
+  if(!monthly.length&&!bi.length)html+='<div class="card glass"><p style="opacity:.7">Tiada staff aktif.</p></div>';
+  html+='<div class="card glass"><h3>Slip Dijana — '+monthLabel(mk)+' ('+slips.length+')</h3>'+
+  (slips.length?slips.map(p=>'<div class="brow"><div><b>'+esc(p.staffName)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+dShort(p.start)+' – '+dShort(p.end)+'</span><span class="chip">'+(p.cycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip chip-ok">'+p.hours+' jam</span></div></div><div class="brow-act"><b class="amt">'+rm(p.total)+'</b><button class="btn btn-sm" onclick="viewSlip(\''+p.id+'\')" title="Lihat">👁</button><button class="btn btn-sm" onclick="downloadSlip(\''+p.id+'\')" title="PDF">⬇</button><button class="btn btn-sm btn-danger" onclick="deleteSlip(\''+p.id+'\')" title="Padam">🗑</button></div></div>').join(''):'<p style="opacity:.7">Belum ada slip untuk bulan ini.</p>')+'</div>'+
+  '<div class="card glass"><h3>📖 Ringkasan Peraturan Gaji (PRD Seksyen 6)</h3><ul class="seclist">'+
+  '<li>Kadar asas '+rm(S.baseRate)+'/jam; <b>'+rm(S.highRate)+'/jam</b> untuk syif dengan jualan &gt; '+rm(S.weekdayThreshold)+' (weekday) / &gt; '+rm(S.weekendThreshold)+' (weekend) — dinilai <b>setiap syif</b>, bukan sebulan.</li>'+
+  '<li>Bonus prestasi '+rm(S.perfBonus)+': jumlah jualan <b>semua syif staff tersebut</b> sebulan &gt; '+rm(S.monthlySalesThreshold)+'.</li>'+
+  '<li>Bonus kehadiran '+rm(S.attBonus)+': hadir penuh, tiada tidak-hadir &amp; <b>tiada rekod pertukaran syif</b> sebulan.</li>'+
+  '<li>Elaun typhoid '+rm(S.typhoidAllowance)+'/kitaran, maksimum '+S.typhoidMax+' kali — kiraan automatik per staff.</li></ul></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderMStaff(){
+  const me=currentUser(),isAdmin=me.role==='admin';
+  const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
+  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>';
+  html+=list.map(x=>{
+    const inactive=x.active===false;
+    return '<div class="card glass"><div class="brow"><div><b>'+esc(x.name)+'</b> '+(inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
+    '<div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin')+'</span><span class="chip">'+esc(x.username)+'</span>'+
+    (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'" title="Kitaran gaji">'+(x.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip">💉 Typhoid '+x.typhoidCount+'/'+DB.settings.typhoidMax+'</span>':'')+'</div></div>'+
+    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button>':'')+
+    '<button class="btn btn-sm" onclick="openResetPin(\''+x.id+'\')">🔑 Set Semula PIN</button>'+
+    (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
+    (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
+  }).join('');
+  html+='<p class="hint">💡 "Tambah Akaun" &amp; "Set Semula PIN" dilaksanakan melalui RPC server-side (admin_create_user / admin_reset_pin) yang menyemak peranan manager/admin di server — kata laluan sentiasa dihash (bcrypt). Kitaran gaji boleh ditukar bila-bila masa mengikut staff individu (PRD 5.6a).</p>';
+  $('#viewRoot').innerHTML=html;
+}
+function renderMSettings(){
+  const me=currentUser(),S=DB.settings;
+  if(me.role!=='admin'){$('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ Tetapan</h2></div><div class="notice warn">Panel ini untuk Admin (pengusaha) sahaja.</div>';return}
+  const f=(id,lb,val,step)=>'<label class="field"><span>'+lb+'</span><input type="number" id="'+id+'" value="'+val+'" step="'+(step||'0.01')+'" min="0"></label>';
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ Tetapan Sistem (Admin)</h2></div>'+
+  '<div class="card glass"><h3>💰 Kadar Gaji, Bonus &amp; Elaun</h3><div class="formgrid">'+
+  f('stBase','Kadar asas / jam (RM)',S.baseRate)+f('stHigh','Kadar tinggi / jam (RM)',S.highRate)+
+  f('stWk','Sasaran jualan weekday (RM)',S.weekdayThreshold)+f('stWknd','Sasaran jualan weekend (RM)',S.weekendThreshold)+
+  f('stMon','Sasaran jualan bulanan untuk bonus (RM)',S.monthlySalesThreshold)+
+  f('stPerf','Bonus prestasi jualan (RM)',S.perfBonus)+f('stAtt','Bonus kehadiran (RM)',S.attBonus)+
+  f('stTyph','Elaun typhoid / kitaran (RM)',S.typhoidAllowance)+f('stTyphMax','Elaun typhoid — maksimum bayaran (kali)',S.typhoidMax,'1')+
+  f('stMax','Maksimum staff setiap syif',S.maxPerShift,'1')+f('stHrs','Jam setiap syif',S.shiftHours,'0.5')+'</div>'+
+  '<label class="chk"><input type="checkbox" id="stStaffSales"'+(S.allowStaffSales?' checked':'')+'> Benarkan staff input jualan sendiri (PRD 5.5)</label>'+
+  '<button class="btn btn-primary btn-big" onclick="saveSettings()">💾 Simpan Tetapan</button>'+
+  '<p class="hint">Semua kadar &amp; syarat bonus boleh dikonfigur tanpa ubah kod (NFR: Kebolehpercayaan). Nilai disimpan dalam database — berkuat kuasa serta-merta untuk slip yang dijana selepas ini.</p></div>'+
+  '<div class="card glass"><h3>🔐 Ringkasan Keselamatan Aktif (Supabase)</h3><ul class="seclist">'+
+  '<li>PIN = kata laluan <b>Supabase Auth</b>, disimpan sebagai <b>hash bcrypt di server</b> — bukan teks biasa, tidak pernah sampai ke database aplikasi sebagai teks.</li>'+
+  '<li><b>Row-Level Security (RLS)</b> di database: slip gaji hanya boleh dibaca oleh pemiliknya; hanya manager/admin boleh mengubah jadual, jualan &amp; gaji — dikuatkuasakan di server walaupun API dipanggil terus.</li>'+
+  '<li>Tindakan sensitif (keluarkan jadual, lulus/tolak pertukaran, cipta akaun, reset PIN) berjalan dalam <b>RPC security-definer</b> yang menyemak peranan caller di server.</li>'+
+  '<li><b>Trigger database</b> menguatkuasakan peraturan tempahan: kapasiti maksimum/syif, tiada duplikasi, tiada tarikh lampau — walaupun ada yang cuba bypass UI.</li>'+
+  '<li>Rate-limit Supabase Auth (anti brute-force) + kunci 60 saat selepas 5 percubaan gagal di klien + auto-log-keluar 30 minit tidak aktif.</li>'+
+  '<li><b>Log audit</b> ditulis oleh trigger (username diambil dari token) dan tidak boleh diubah/dipadam melalui API.</li>'+
+  '<li><b>anon key</b> memang selamat didedahkan dalam frontend — semua akses dikawal oleh RLS. <b>service_role key JANGAN</b> sesekali dimasukkan ke dalam kod frontend.</li></ul></div>'+
+  '<div class="card glass"><h3>ℹ️ Nota</h3><p class="hint">Untuk reset penuh data demo: buka Supabase → SQL Editor → jalankan semula <b>01_schema.sql</b> kemudian <b>02_seed.sql</b>. Semua akaun demo akan dicipta semula.</p></div>';
+}
+function renderMAudit(){
+  const rows=DB.audit.slice(0,150);
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📜 Log Audit Sistem</h2></div>'+
+  '<div class="card glass"><div class="tblwrap"><table class="tbl"><tr><th>Masa</th><th>Pengguna</th><th>Tindakan</th><th>Butiran</th></tr>'+
+  rows.map(a=>'<tr><td>'+new Date(a.t).toLocaleString('ms-MY')+'</td><td>'+esc(a.by)+'</td><td>'+esc(a.action)+'</td><td>'+esc(a.detail||'')+'</td></tr>').join('')+'</table></div></div>'+
+  '<p class="hint">Setiap tindakan kritikal direkodkan secara automatik oleh trigger database: login/logout, kelulusan tempahan &amp; pertukaran, penerbitan jadual, input jualan, penjanaan/padaman slip, PIN &amp; tetapan. Baris log tidak boleh diubah melalui API.</p>';
+}
+
+/* ---------- 18. BOOT ---------- */
+async function boot(){
+  if(!window.supabase){ROUTE.view='setup';render();return}
+  if(!CONFIG||!CONFIG.SUPABASE_URL||!CONFIG.SUPABASE_ANON_KEY||/GANTI|XXXX/i.test(CONFIG.SUPABASE_URL+CONFIG.SUPABASE_ANON_KEY)){
+    ROUTE.view='setup';render();return}
+  SB=supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
+  SB.auth.onAuthStateChange(ev=>{
+    if(ev==='SIGNED_OUT'&&ME){ME=null;DB=emptyDB();ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};render()}
+  });
+  const {data:{session}}=await SB.auth.getSession();
+  if(session&&session.user){
+    const {data:prof}=await SB.from('profiles').select('*').eq('id',session.user.id).single();
+    if(prof&&prof.active!==false){
+      ME=mapProfile(prof);
+      ROUTE={view:prof.role==='staff'?'staff':'manager',portal:'staff',tab:'cal',mtab:'dash',mk:monthKey(todayStr()),bmk:null,smk:null,pmk:null,saleEdit:null};
+      await loadAll();
+    }else{await SB.auth.signOut()}
+  }
+  render();startIdleWatch();
+  window.addEventListener('afterprint',()=>{$('#printArea').innerHTML=''});
+}
+boot();
+</script>
+</body>
+</html>
