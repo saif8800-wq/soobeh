@@ -6,5 +6,4 @@
  ============================================================
 const CONFIG = {
   SUPABASE_URL 'https://bzocwralakuzdufpbgdf.supabase.co',
-  SUPABASE_ANON_KEY 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6b2N3cmFsYWt1emR1ZnBiZ2RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTE5NjMsImV4cCI6MjEwNzAyNzk2M30.efEczz0NI3ufhpW2uHWrr_T0-TBO_0ql5qNmVb87CkI'
-};
+  SUPABASE_ANON_KEY 'sb_publishable_eq1QQrB3iokod9Qxld9AwA_1iq8Az9U'};
