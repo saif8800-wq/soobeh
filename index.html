@@ -324,14 +324,23 @@ async function openNotifs(){
 function getSale(date,shift){const s=DB.sales.find(x=>x.date===date&&x.shift===shift);return s?s.amount:null}
 function shiftRate(ds,shift,sale){const S=DB.settings;const th=isWeekend(ds)?S.weekendThreshold:S.weekdayThreshold;return (sale!=null&&sale>th)?S.highRate:S.baseRate}
 function periodPublished(pk){return !!DB.published[pk]}
-function scheduledEntries(staffId,mk){ /* gabung ikut tempoh: diterbitkan→jadual, belum→tempahan disahkan */
+function scheduledEntries(staffId,mk){ /* gabung: jadual (termasuk ASSIGN manager) + tempahan disahkan */
   let out=[];
   [mk+'-A',mk+'-B'].forEach(pk=>{
     const b=periodBounds(pk);
-    if(DB.published[pk])out=out.concat(DB.schedule.filter(x=>x.date>=b[0]&&x.date<=b[1]&&x.staffId===staffId));
-    else out=out.concat(DB.bookings.filter(x=>x.date>=b[0]&&x.date<=b[1]&&x.staffId===staffId&&x.status==='approved').map(x=>({date:x.date,shift:x.shift,noShow:false})));
+    const inR=x=>x.date>=b[0]&&x.date<=b[1];
+    if(DB.published[pk]){
+      out=out.concat(DB.schedule.filter(x=>inR(x)&&x.staffId===staffId));
+    }else{
+      const key=e=>e.date+'|'+e.shift;
+      const sc=DB.schedule.filter(x=>inR(x)&&x.staffId===staffId); /* tugasan terus manager (termasuk tarikh lampau) */
+      const seen=new Set(sc.map(key));
+      const bk=DB.bookings.filter(x=>inR(x)&&x.staffId===staffId&&x.status==='approved'&&!seen.has(key(x))).map(x=>({date:x.date,shift:x.shift,noShow:false}));
+      out=out.concat(sc).concat(bk);
+    }
   });
   return out;
+}
 }
 function computeCycle(staffId,pStart,pEnd){
   const S=DB.settings,mk=monthKey(pStart);
