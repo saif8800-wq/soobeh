@@ -341,7 +341,6 @@ function scheduledEntries(staffId,mk){ /* gabung: jadual (termasuk ASSIGN manage
   });
   return out;
 }
-}
 function computeCycle(staffId,pStart,pEnd){
   const S=DB.settings,mk=monthKey(pStart);
   const entries=scheduledEntries(staffId,mk).filter(e=>!e.noShow&&e.date>=pStart&&e.date<=pEnd);
