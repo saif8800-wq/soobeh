@@ -224,7 +224,7 @@ function monthLabel(mk){const p=mk.split('-');return BLN[+p[1]-1]+' '+p[0]}
 function ago(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'baru sebentar';if(s<3600)return Math.floor(s/60)+' minit lalu';if(s<86400)return Math.floor(s/3600)+' jam lalu';return Math.floor(s/86400)+' hari lalu'}
 function nextDay(ds){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+1);return ymd(d)}
 
-/* ---------- TEMPoh 2 MINGGU (kitaran baharu) ---------- */
+/* ---------- TEMPOH 2 MINGGU (kitaran baharu) ---------- */
 function periodOf(ds){return ds.slice(0,7)+((+ds.slice(8,10))<=15?'-A':'-B')}
 function periodBounds(pk){const mk=pk.slice(0,7);return pk.endsWith('A')?[mk+'-01',mk+'-15']:[mk+'-16',mk+'-'+pad2(daysInMonth(mk))]}
 function periodLabel(pk){const b=periodBounds(pk);return 'Tempoh '+(pk.endsWith('A')?'1':'2')+' · '+dShort(b[0])+' – '+dShort(b[1])}
@@ -279,7 +279,7 @@ async function loadAll(){
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
 }
 async function sync(){await loadAll()}
-async function syncNow(){if(!ME)return;await sync();render();toast('Data dikemaskini 🔄','ok')}
+async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
 function slotCount(ds,shift){const m=DB.slotMonths[monthKey(ds)];return m?(m[ds+'|'+shift]||0):0}
 async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — cache ikut bulan */
   if(!ME||ME.role!=='staff'||!mk||DB.slotMonths[mk]!==undefined)return;
@@ -473,7 +473,7 @@ function downloadSlip(id){const p=DB.payslips.find(x=>x.id===id);if(!p)return;
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);}
 
-/* ---------- 7. MODUL TEMPahan SYIF (kitaran 2 minggu — PRD 5.2/5.3) ---------- */
+/* ---------- 7. MODUL TEMPAHAN SYIF (kitaran 2 minggu — PRD 5.2/5.3) ---------- */
 async function submitBooking(ds,shift){
   if(!ME||ME.role!=='staff')return {ok:false,msg:'Akses ditolak'};
   if(periodPublished(periodOf(ds)))return {ok:false,msg:'Jadual tempoh ini telah dikunci — guna Pertukaran Syif'};
@@ -730,6 +730,52 @@ async function submitAddStaff(){
    '<button class="btn btn-primary btn-big" onclick="closeModal()">Tutup</button>');
 }
 
+/* ---------- 10b. FUNGSI YANG TERCICIR (tukar PIN, reset PIN, aktif/nyahaktif, kitaran) ---------- */
+async function changeMyPin(){
+  if(!ME)return;
+  const cur=(($('#pinCur')||{}).value||'').trim(),n1=(($('#pinNew')||{}).value||'').trim(),n2=(($('#pinNew2')||{}).value||'').trim();
+  if(!/^\d{4,6}$/.test(n1))return toast('PIN baharu mesti 4–6 digit','err');
+  if(n1!==n2)return toast('PIN baharu tidak sepadan','err');
+  const chk=await SB.auth.signInWithPassword({email:ME.username+'@soobeh.app',password:cur+'-soobeh'});
+  if(chk.error)return toast('PIN semasa salah','err');
+  const {error}=await SB.auth.updateUser({password:n1+'-soobeh'});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('pin_change',ME.username);
+  closeModal();render();toast('PIN berjaya ditukar ✔','ok');
+}
+async function toggleActive(id){
+  const u=reqMgr();if(!u)return;const t=DB.users.find(x=>x.id===id);if(!t)return;
+  if(!confirm((t.active===false?'Aktifkan':'Nyahaktif')+' akaun '+t.name+'?'))return;
+  const {error}=await SB.from('profiles').update({active:t.active===false}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('user_active',t.username+' → '+(t.active===false?'aktif':'tidak aktif'));
+  await sync();render();toast('Status akaun dikemaskini ✔','ok');
+}
+async function toggleCycle(id){
+  const u=reqMgr();if(!u)return;const t=DB.users.find(x=>x.id===id);if(!t)return;
+  const nv=t.payCycle==='monthly'?'biweekly':'monthly';
+  if(!confirm('Tukar kitaran gaji '+t.name+' kepada '+(nv==='monthly'?'Bulanan':'2-Minggu')+'?'))return;
+  const {error}=await SB.from('profiles').update({pay_cycle:nv}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('user_cycle',t.username+' → '+nv);
+  await sync();render();toast('Kitaran gaji dikemaskini ✔','ok');
+}
+function openResetPin(id){
+  const u=reqMgr();if(!u)return;const t=DB.users.find(x=>x.id===id);if(!t)return;
+  openModal('🔑 Set Semula PIN — '+esc(t.name),
+   '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="rpPin" inputmode="numeric" maxlength="6"></label>'+
+   '<button class="btn btn-primary btn-big" onclick="submitResetPin(\''+id+'\')">Simpan</button>');
+}
+async function submitResetPin(id){
+  const pin=(($('#rpPin')||{}).value||'').trim();
+  if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
+  let r=null;
+  try{r=await SB.functions.invoke('reset-soobeh-pin',{body:{p_user:id,p_pin:pin}})}catch(e){return toast('Gagal: '+((e&&e.message)||e),'err')}
+  if(r.error||(r.data&&r.data.error))return toast('Gagal: '+((r.data&&r.data.error)||(r.error&&r.error.message)||'ralat'),'err');
+  await logAudit('pin_reset',(usernameOf(id)||'?'));
+  closeModal();toast('PIN disetkan semula ✔','ok');
+}
+
 /* ---------- 11. TETAPAN (Admin) ---------- */
 async function saveSettings(){
   const me=currentUser();if(!me||me.role!=='admin')return toast('Akses admin sahaja','err');
@@ -783,7 +829,10 @@ function keyBack(){pinBuf=pinBuf.slice(0,-1);renderDots()}
 function clearPin(){pinBuf='';renderDots()}
 document.addEventListener('keydown',e=>{
   if(ROUTE.view!=='login')return;
-  if(e.target&&e.target.tagName==='INPUT')return;
+  if(e.target&&e.target.tagName==='INPUT'){
+    if(e.key==='Enter'&&e.target.id==='loginUser'){doLogin()}
+    return;
+  }
   if(/^[0-9]$/.test(e.key)){keyPress(e.key);e.preventDefault()}
   else if(e.key==='Backspace'){keyBack();e.preventDefault()}
   else if(e.key==='Enter'){doLogin()}
@@ -914,8 +963,8 @@ function openSlot(ds,shift){
     if(past&&sale!=null){const rate=shiftRate(ds,shift,sale);
       body+='<div class="detailrow"><span>Jualan syif ini</span><b>'+rm(sale)+'</b></div><div class="detailrow"><span>Kadar gaji syif ini</span><b>'+rm2(rate)+'/jam'+(rate>DB.settings.baseRate?' ⚡':'')+'</b></div>';}
     if(mine&&!past)body+='<button class="btn btn-primary btn-big" onclick="closeModal();openSwapModal(\''+mine.id+'\')">🔄 Mohon Tukar Syif Ini</button>';
-  }else if(past){
-    body+='<div class="notice">Tarikh lampau — tempahan telah tertutup.</div>';
+  }else if(ds<=todayStr()){
+    body+='<div class="notice">Tarikh lampau atau hari ini — tempahan telah tertutup.</div>';
   }else if(ds>winEnd){
     body+='<div class="notice warn">🔒 Tempoh ini <b>belum dibuka</b> untuk tempahan. Tempahan dibenarkan untuk tempoh semasa &amp; tempoh seterusnya sahaja (hingga '+dShort(winEnd)+').</div>';
   }else{
@@ -1198,10 +1247,8 @@ function renderMPayroll(){
 function renderMStaff(){
   const me=currentUser(),isAdmin=me.role==='admin';
   const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
-  const me=currentUser(),isAdmin=me.role==='admin';
-const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
-const S=DB.settings;
-let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2>...
+  const S=DB.settings;
+  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>'+
   '<div class="card glass"><h3>💉 Elaun Suntikan Typhoid — Kawalan Bayaran</h3>'+
   '<div class="detailrow"><span>Status bayaran</span><b>'+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+'</b></div>'+
   '<div class="detailrow"><span>Kadar</span><b>'+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff)</b></div>'+
@@ -1217,7 +1264,7 @@ let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2>...
     (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
     (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
   }).join('');
-    html+='<p class="hint">💡 "Tambah Akaun" kini <b>sepenuhnya automatik</b> dari app — tiada perlu buka Supabase Dashboard. Akaun baharu boleh log masuk serta-merta.</p>';
+  html+='<p class="hint">💡 "Tambah Akaun" kini <b>sepenuhnya automatik</b> dari app — tiada perlu buka Supabase Dashboard. Akaun baharu boleh log masuk serta-merta.</p>';
   $('#viewRoot').innerHTML=html;
 }
 function renderMSettings(){
