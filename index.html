@@ -1198,8 +1198,10 @@ function renderMPayroll(){
 function renderMStaff(){
   const me=currentUser(),isAdmin=me.role==='admin';
   const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
-  let html='<div class="pagehea  const S=DB.settings;
-  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>'+
+  const me=currentUser(),isAdmin=me.role==='admin';
+const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
+const S=DB.settings;
+let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2>...
   '<div class="card glass"><h3>💉 Elaun Suntikan Typhoid — Kawalan Bayaran</h3>'+
   '<div class="detailrow"><span>Status bayaran</span><b>'+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+'</b></div>'+
   '<div class="detailrow"><span>Kadar</span><b>'+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff)</b></div>'+
