@@ -643,14 +643,14 @@ function editSale(date,shift){ROUTE.saleEdit={date:date,shift:shift};render();}
 /* ---------- 10. PENGURUSAN STAF ---------- */
 function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   openModal('Tambah Akaun Baharu',
-  '<div class="notice info">2 langkah (cara rasmi Supabase): <b>1)</b> Cipta akaun dahulu di Supabase Dashboard → Authentication → Users → Add user — Email: <b>username@soobeh.app</b>, Password: <b>PIN-soobeh</b> (contoh: 5678-soobeh), tandakan ✓ Auto Confirm. <b>2)</b> Kemudian tekan butang di bawah.</div>'+
+  '<div class="notice ok">✨ Akaun dicipta <b>serta-merta dari sini</b> — tiada perlu buka Supabase Dashboard lagi.</div>'+
   '<label class="field"><span>Nama penuh</span><input id="nsName" placeholder="cth: Fatimah binti Omar"></label>'+
-  '<label class="field"><span>Username (mest sama seperti email di Dashboard, tanpa @soobeh.app)</span><input id="nsUser" autocapitalize="none" placeholder="cth: fatimah05"></label>'+
+  '<label class="field"><span>Username (ID pekerja ringkas)</span><input id="nsUser" autocapitalize="none" placeholder="cth: fatimah05"></label>'+
   '<label class="field"><span>No. telefon</span><input id="nsPhone" placeholder="cth: 012-345 6789"></label>'+
   '<label class="field"><span>PIN awal (4–6 digit)</span><input id="nsPin" inputmode="numeric" maxlength="6" placeholder="cth: 5678"></label>'+
   '<label class="field"><span>Kitaran gaji</span><select id="nsCycle"><option value="monthly">Bulanan (1hb – akhir bulan)</option><option value="biweekly">Setiap 2 Minggu (1–14, 15–akhir)</option></select></label>'+
   (me.role==='admin'?'<label class="field"><span>Peranan</span><select id="nsRole"><option value="staff">Staff</option><option value="manager">Manager</option><option value="admin">Admin</option></select></label>':'')+
-  '<button class="btn btn-primary btn-big" onclick="submitAddStaff()">✚ Tambah Akaun</button>');}
+  '<button class="btn btn-primary btn-big" onclick="submitAddStaff()">✚ Tambah Akaun Sekarang</button>');}
 async function submitAddStaff(){
   const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   const name=$('#nsName').value.trim(),un=$('#nsUser').value.trim().toLowerCase(),ph=$('#nsPhone').value.trim(),pin=$('#nsPin').value.trim(),cyc=$('#nsCycle').value;
@@ -659,53 +659,26 @@ async function submitAddStaff(){
   if(!/^[a-z0-9_.-]{2,20}$/.test(un))return toast('Username tidak sah (a-z, 0-9; 2–20 aksara)','err');
   if(DB.users.some(x=>x.username===un))return toast('Username sudah wujud','err');
   if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
-  const {error}=await SB.rpc('admin_create_user',{p_username:un,p_name:name,p_phone:ph,p_role:role,p_pay_cycle:cyc,p_pin:pin});
-  if(error)return toast(friendly(error),'err');
-  await logAudit('user_add',un+' ('+role+')');
-  closeModal();await sync();render();toast('Akaun '+un+' ditambah ✔','ok');}
-function openResetPin(id){ROUTE.resetId=id;const t=DB.users.find(x=>x.id===id);if(!t)return;
-  openModal('Set Semula PIN — '+esc(t.name),
-  '<div class="notice info">Proses rasmi apabila staff terlupa PIN — tanpa OTP/emel (PRD 5.1). Kata laluan baharu dihash (bcrypt) di server Supabase Auth.</div>'+
-  '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="rpPin" inputmode="numeric" maxlength="6"></label>'+
-  '<button class="btn btn-primary btn-big" onclick="submitResetPin()">Simpan PIN Baharu</button>');}
-async function submitResetPin(){
-  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
-  const t=DB.users.find(x=>x.id===ROUTE.resetId);if(!t)return;
-  const pin=$('#rpPin').value.trim();
-  if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
-  const {error}=await SB.rpc('admin_reset_pin',{p_username:t.username,p_pin:pin});
-  if(error)return toast(friendly(error),'err');
-  await notifyUsers([t.id],'🔑 PIN anda telah ditetapkan semula oleh '+me.name+'. Sila log masuk dengan PIN baharu.');
-  await logAudit('pin_reset',t.username+' oleh '+me.username);
-  closeModal();render();toast('PIN '+t.username+' dikemaskini ✔','ok');}
-async function toggleCycle(id){
-  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
-  const t=DB.users.find(x=>x.id===id);if(!t||t.role!=='staff')return;
-  const nc=t.payCycle==='monthly'?'biweekly':'monthly';
-  const {error}=await SB.from('profiles').update({pay_cycle:nc}).eq('id',id);
-  if(error)return toast(friendly(error),'err');
-  await logAudit('paycycle_change',t.username+' → '+nc);
-  await sync();render();toast('Kitaran '+t.name+' → '+(nc==='monthly'?'Bulanan':'2-Minggu'),'ok');}
-async function toggleActive(id){
-  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
-  const t=DB.users.find(x=>x.id===id);if(!t||t.id===me.id)return;
-  if(t.active!==false&&!confirm('Nyahaktifkan akaun '+t.name+'? Mereka tidak boleh log masuk sehingga diaktifkan semula.'))return;
-  const nv=t.active===false;
-  const {error}=await SB.from('profiles').update({active:nv}).eq('id',id);
-  if(error)return toast(friendly(error),'err');
-  await logAudit('user_'+(nv?'activate':'deactivate'),t.username);
-  await sync();render();toast('Akaun '+t.username+(nv?' diaktifkan ✔':' dinyahaktifkan'),'ok');}
-async function changeMyPin(){
-  const u=currentUser();if(!u)return;
-  const cur=$('#pinCur').value.trim(),n1=$('#pinNew').value.trim(),n2=$('#pinNew2').value.trim();
-  if(!/^\d{4,6}$/.test(n1))return toast('PIN baharu mesti 4–6 digit','err');
-  if(n1!==n2)return toast('Pengesahan PIN tidak sepadan','err');
-  const {error:verr}=await SB.auth.signInWithPassword({email:u.username+'@soobeh.app',password:cur+'-soobeh'});
-  if(verr)return toast('PIN semasa salah','err');
-  const {error}=await SB.auth.updateUser({password:n1+'-soobeh'});
-  if(error)return toast(friendly(error),'err');
-  await logAudit('pin_change',u.username);
-  toast('PIN berjaya ditukar ✔','ok');closeModal();render();}
+  const btn=document.querySelector('.modal .btn-primary');if(btn){btn.disabled=true;btn.textContent='⏳ Mencipta akaun...'}
+  /* Panggil Edge Function — service_role kekal di server Supabase, bukan dalam browser */
+  let res=null,invErr=null;
+  try{const r=await SB.functions.invoke('create-soobeh-user',{body:{p_username:un,p_name:name,p_phone:ph,p_role:role,p_pay_cycle:cyc,p_pin:pin}});res=r.data;invErr=r.error}
+  catch(e){invErr=e}
+  if(invErr)return toast('Fungsi tidak dapat dipanggil: '+(invErr.message||invErr)+' — pastikan Edge Function "create-soobeh-user" telah dicipta di Supabase.','err');
+  if(!res)return toast('Tiada respons dari server fungsi','err');
+  if(res.error)return toast(res.error,'err');
+  await logAudit('user_add',un+' ('+role+') — auto');
+  closeModal();await sync();render();
+  openModal('✅ Akaun Dicipta',
+   '<div class="notice ok">Akaun <b>'+esc(un)+'</b> sedia digunakan serta-merta.</div>'+
+   '<div class="detailrow"><span>Nama</span><b>'+esc(name)+'</b></div>'+
+   '<div class="detailrow"><span>ID Log Masuk</span><b>'+esc(un)+'</b></div>'+
+   '<div class="detailrow"><span>PIN</span><b>'+esc(pin)+'</b></div>'+
+   '<div class="detailrow"><span>Peranan</span><b>'+esc(role)+'</b></div>'+
+   '<div class="detailrow"><span>Kitaran gaji</span><b>'+(cyc==='monthly'?'Bulanan':'2-Minggu')+'</b></div>'+
+   '<p class="hint">Sampaikan ID &amp; PIN ini kepada staff — mereka boleh log masuk sekarang tanpa langkah lain. Galakkan mereka tukar PIN sendiri di tab Profil selepas log masuk pertama.</p>'+
+   '<button class="btn btn-primary btn-big" onclick="closeModal()">Tutup</button>');
+}
 
 /* ---------- 11. TETAPAN (Admin) ---------- */
 async function saveSettings(){
@@ -1186,7 +1159,7 @@ function renderMStaff(){
     (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
     (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
   }).join('');
-  html+='<p class="hint">💡 "Tambah Akaun" = 2 langkah: cipta akaun di Supabase Dashboard (Authentication → Users) dengan email <b>username@soobeh.app</b> &amp; password <b>PIN-soobeh</b>, kemudian tekan butang Tambah Akaun dalam sistem ini.</p>';
+    html+='<p class="hint">💡 "Tambah Akaun" kini <b>sepenuhnya automatik</b> dari app — tiada perlu buka Supabase Dashboard. Akaun baharu boleh log masuk serta-merta.</p>';
   $('#viewRoot').innerHTML=html;
 }
 function renderMSettings(){
