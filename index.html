@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#070b1e">
-<title>Soobeh Kiosk — Sistem Jadual Syif & Gaji</title>
+<title>Soobeh TBG — Sistem Jadual Syif & Gaji</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -80,7 +80,7 @@ details.demo .inner{padding:0 18px 16px}
 .wrap{max-width:1020px;margin:0 auto;padding:0 14px 140px}
 .pagehead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
 .monthnav{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:16px}
-.monthnav b{min-width:120px;text-align:center}
+.monthnav b{min-width:120px;text-align:center;font-size:14.5px}
 .monthnav button{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:17px;cursor:pointer}
 .notice{padding:14px 16px;border-radius:16px;margin:10px 0;font-size:15.5px;border:1px solid;line-height:1.5}
 .notice.info{background:rgba(129,140,248,.12);border-color:rgba(129,140,248,.45)}
@@ -106,6 +106,7 @@ details.demo .inner{padding:0 18px 16px}
 .cal-cell{min-height:88px;border-radius:14px;background:rgba(255,255,255,.05);padding:6px;display:flex;flex-direction:column;gap:4px}
 .cal-cell.blank{background:transparent}
 .cal-cell.past{opacity:.5}
+.cal-cell.locked{opacity:.32}
 .cal-day{font-size:13px;font-weight:800;text-align:center;opacity:.85}
 .slot{border:0;border-radius:10px;padding:5px;font-size:11.5px;font-weight:800;display:flex;justify-content:space-between;align-items:center;cursor:pointer;color:#fff;min-height:31px;transition:.15s}
 .slot:hover{filter:brightness(1.25)}
@@ -197,8 +198,9 @@ details.demo .inner{padding:0 18px 16px}
 <script>
 "use strict";
 /* =====================================================================
-   SOOBEH KIOSK — Sistem Jadual Syif & Gaji (Fasa 1, PRD v1.0)
-   Frontend: Vercel  |  Backend: Supabase (Postgres + Auth + RLS + RPC)
+   SOOBEH — Sistem Jadual Syif & Gaji (Fasa 1, PRD v1.0)
+   KITARAN TEMPOHAN 2 MINGGU: Tempoh 1 (1–15) & Tempoh 2 (16–akhir)
+   + Manager assign staff ke slot kosong & tarikh lampau (kecemasan)
    ===================================================================== */
 
 /* ---------- 1. UTILITI ---------- */
@@ -209,6 +211,7 @@ function rm(n){return 'RM '+(n||0).toLocaleString('en-MY',{minimumFractionDigits
 function rm2(n){return 'RM '+(n||0).toFixed(2)}
 const HARI=['Ahad','Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu'];
 const BLN=['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'];
+const DOW=['Isn','Sel','Rab','Kha','Jum','Sab','Aha'];
 function ymd(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())}
 function todayStr(){return ymd(new Date())}
 function monthKey(ds){return ds.slice(0,7)}
@@ -219,14 +222,25 @@ function fmtDateDS(ds){const d=new Date(ds+'T00:00:00');return HARI[d.getDay()]+
 function dShort(ds){const d=new Date(ds+'T00:00:00');return d.getDate()+' '+BLN[d.getMonth()].slice(0,3)+' '+d.getFullYear()}
 function monthLabel(mk){const p=mk.split('-');return BLN[+p[1]-1]+' '+p[0]}
 function ago(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'baru sebentar';if(s<3600)return Math.floor(s/60)+' minit lalu';if(s<86400)return Math.floor(s/3600)+' jam lalu';return Math.floor(s/86400)+' hari lalu'}
+function nextDay(ds){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+1);return ymd(d)}
+
+/* ---------- TEMPoh 2 MINGGU (kitaran baharu) ---------- */
+function periodOf(ds){return ds.slice(0,7)+((+ds.slice(8,10))<=15?'-A':'-B')}
+function periodBounds(pk){const mk=pk.slice(0,7);return pk.endsWith('A')?[mk+'-01',mk+'-15']:[mk+'-16',mk+'-'+pad2(daysInMonth(mk))]}
+function periodLabel(pk){const b=periodBounds(pk);return 'Tempoh '+(pk.endsWith('A')?'1':'2')+' · '+dShort(b[0])+' – '+dShort(b[1])}
+function curPeriod(){return periodOf(todayStr())}
+function nextPeriod(pk){const mk=pk.slice(0,7);return pk.endsWith('A')?mk+'-B':shiftMonth(mk,1)+'-A'}
+function prevPeriod(pk){const mk=pk.slice(0,7);return pk.endsWith('B')?mk+'-A':shiftMonth(mk,-1)+'-B'}
+function shiftPeriod(pk,d){let p=pk;for(let i=0;i<Math.abs(d);i++)p=d>0?nextPeriod(p):prevPeriod(p);return p}
+function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],published:{},settings:Object.assign({},DEF_SET),slotCounts:{}}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
-/* ---------- 3. PENGURUSAN DATA (cache + Supabase) ---------- */
+/* ---------- 3. PENGURUSAN DATA ---------- */
 const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active});
 function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
 const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
@@ -256,33 +270,34 @@ async function loadAll(){
   DB.users=(q[0].data||[]).map(mapProfile);
   DB.bookings=(q[1].data||[]).map(mapBooking);
   DB.schedule=(q[2].data||[]).map(mapSchedule);
-  DB.published={};(q[3].data||[]).forEach(r=>DB.published[r.month_key]={t:Date.parse(r.published_at),by:usernameOf(r.published_by)});
+  DB.published={};(q[3].data||[]).forEach(r=>{DB.published[r.period_key]={t:Date.parse(r.published_at),by:usernameOf(r.published_by)}});
   DB.swaps=(q[4].data||[]).map(mapSwap);
   DB.sales=(q[5].data||[]).map(mapSale);
   DB.payslips=(q[6].data||[]).map(mapPayslip);
   DB.notifications=(q[7].data||[]).map(mapNotif);
   DB.settings=mapSettings((q[8].data||[])[0]);
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
-  else await loadSlotCounts(ROUTE.mk||monthKey(todayStr()));
-}
-async function loadSlotCounts(mk){
-  if(!ME||ME.role!=='staff'||!mk)return;
-  const {data,error}=await SB.rpc('slot_counts',{p_month:mk});
-  if(error)return;
-  DB.slotCounts={};(data||[]).forEach(r=>{if(r.d)DB.slotCounts[r.d+'|'+r.shift]=r.n});
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;await sync();render();toast('Data dikemaskini 🔄','ok')}
+function slotCount(ds,shift){const m=DB.slotMonths[monthKey(ds)];return m?(m[ds+'|'+shift]||0):0}
+async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — cache ikut bulan */
+  if(!ME||ME.role!=='staff'||!mk||DB.slotMonths[mk]!==undefined)return;
+  DB.slotMonths[mk]={};
+  try{const {data,error}=await SB.rpc('slot_counts',{p_month:mk});
+    if(!error&&data)data.forEach(r=>{if(r.d)DB.slotMonths[mk][r.d+'|'+r.shift]=r.n});
+  }catch(e){}
+  render();
+}
 
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
-  ME=null;DB=emptyDB();
-  ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};
-  pinBuf='';render();if(msg)toast(msg,'info');
+  ME=null;DB=emptyDB();ROUTE=freshROUTE();pinBuf='';render();if(msg)toast(msg,'info');
 }
 function startIdleWatch(){let last=Date.now();
   ['click','keydown','touchstart','pointerdown'].forEach(ev=>document.addEventListener(ev,()=>{last=Date.now()},{capture:true,passive:true}));
@@ -291,7 +306,11 @@ function startIdleWatch(){let last=Date.now();
 async function logAudit(action,detail){try{await SB.from('audit').insert({action:action,detail:detail||''})}catch(e){}}
 async function notifyUsers(ids,msg){try{const list=(ids||[]).filter(Boolean).map(id=>({user_id:id,msg:msg}));if(list.length)await SB.from('notifications').insert(list)}catch(e){}}
 async function notifyManagers(msg){await notifyUsers(DB.users.filter(u=>(u.role==='manager'||u.role==='admin')&&u.active!==false).map(u=>u.id),msg)}
-function friendly(e){const m=(e&&e.message)||String(e||'Ralat');if(/duplicate key/i.test(m))return'Rekod ini sudah wujud';if(/row-level security/i.test(m))return'Akses ditolak 🔒';return m}
+function friendly(e){const m=(e&&e.message)||String(e||'Ralat');
+  if(/publish_period|PGRST202/i.test(m))return 'Jalankan 05_upgrade_2week.sql di Supabase SQL Editor dahulu';
+  if(/duplicate key/i.test(m))return 'Rekod ini sudah wujud';
+  if(/row-level security/i.test(m))return 'Akses ditolak 🔒';
+  return m}
 function bellHTML(){const u=currentUser();if(!u)return '';const c=DB.notifications.filter(n=>n.userId===u.id&&!n.read).length;return '<button class="iconbtn" onclick="openNotifs()" aria-label="Notifikasi">🔔'+(c?'<span class="badge">'+c+'</span>':'')+'</button>'}
 async function openNotifs(){
   const u=currentUser();if(!u)return;
@@ -304,11 +323,15 @@ async function openNotifs(){
 /* ---------- 5. LOGIK PERNIAGAAN (PRD Seksyen 6 — dinilai SETIAP SYIF) ---------- */
 function getSale(date,shift){const s=DB.sales.find(x=>x.date===date&&x.shift===shift);return s?s.amount:null}
 function shiftRate(ds,shift,sale){const S=DB.settings;const th=isWeekend(ds)?S.weekendThreshold:S.weekdayThreshold;return (sale!=null&&sale>th)?S.highRate:S.baseRate}
-function bookingsFor(date,shift){return DB.bookings.filter(b=>b.date===date&&b.shift===shift)}
-function monthPublished(mk){return !!DB.published[mk]}
-function scheduledEntries(staffId,mk){
-  if(DB.published[mk])return DB.schedule.filter(e=>e.monthKey===mk&&e.staffId===staffId);
-  return DB.bookings.filter(b=>monthKey(b.date)===mk&&b.staffId===staffId&&b.status==='approved').map(b=>({date:b.date,shift:b.shift,noShow:false}));
+function periodPublished(pk){return !!DB.published[pk]}
+function scheduledEntries(staffId,mk){ /* gabung ikut tempoh: diterbitkan→jadual, belum→tempahan disahkan */
+  let out=[];
+  [mk+'-A',mk+'-B'].forEach(pk=>{
+    const b=periodBounds(pk);
+    if(DB.published[pk])out=out.concat(DB.schedule.filter(x=>x.date>=b[0]&&x.date<=b[1]&&x.staffId===staffId));
+    else out=out.concat(DB.bookings.filter(x=>x.date>=b[0]&&x.date<=b[1]&&x.staffId===staffId&&x.status==='approved').map(x=>({date:x.date,shift:x.shift,noShow:false})));
+  });
+  return out;
 }
 function computeCycle(staffId,pStart,pEnd){
   const S=DB.settings,mk=monthKey(pStart);
@@ -424,7 +447,7 @@ function payslipHTML(p){
   const S=DB.settings;
   const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+(s.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
   const line=(l,v)=>'<tr><td>'+l+'</td><td style="text-align:right">'+v+'</td></tr>';
-  return '<div class="payslip"><div class="ps-head"><div><h1>SOOBEH KIOSK</h1><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
+  return '<div class="payslip"><div class="ps-head"><div><h1>SOOBEH</h1><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
   '<div class="ps-grid"><div><b>Nama:</b> '+esc(p.staffName)+'</div><div><b>ID Pekerja:</b> '+esc(p.username)+'</div><div><b>Tempoh Kitaran:</b> '+fmtDateDS(p.start)+' – '+fmtDateDS(p.end)+'</div><div><b>Kitaran Bayaran:</b> '+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</div></div>'+
   '<table><tr><th>Butiran</th><th style="text-align:right">Jumlah (RM)</th></tr>'+
   line('Gaji Asas — '+p.hours+' jam × RM '+S.baseRate.toFixed(2)+'/jam',p.basePay.toFixed(2))+
@@ -442,17 +465,19 @@ function downloadSlip(id){const p=DB.payslips.find(x=>x.id===id);if(!p)return;
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);}
 
-/* ---------- 7. MODUL TEMPahan SYIF (PRD 5.2/5.3) ---------- */
+/* ---------- 7. MODUL TEMPahan SYIF (kitaran 2 minggu — PRD 5.2/5.3) ---------- */
 async function submitBooking(ds,shift){
   if(!ME||ME.role!=='staff')return {ok:false,msg:'Akses ditolak'};
-  if(monthPublished(monthKey(ds)))return {ok:false,msg:'Jadual bulan ini telah dikunci — guna Pertukaran Syif'};
+  if(periodPublished(periodOf(ds)))return {ok:false,msg:'Jadual tempoh ini telah dikunci — guna Pertukaran Syif'};
   if(ds<=todayStr())return {ok:false,msg:'Tarikh lampau — tempahan tertutup'};
-  if(ds>ymd(new Date(Date.now()+65*864e5)))return {ok:false,msg:'Tempahan dibenarkan dalam 2 bulan hadapan sahaja'};
+  const winEnd=bookingWindowEnd();
+  if(ds>winEnd)return {ok:false,msg:'Tempahan dibenarkan untuk tempoh semasa & tempoh seterusnya sahaja (kitaran 2 minggu)'};
   if(DB.bookings.some(b=>b.staffId===ME.id&&b.date===ds&&b.shift===shift&&(b.status==='pending'||b.status==='approved')))return {ok:false,msg:'Anda sudah menempah slot ini'};
-  const n=DB.slotCounts[ds+'|'+shift]||0;
+  if(DB.schedule.some(e=>e.staffId===ME.id&&e.date===ds&&e.shift===shift))return {ok:false,msg:'Anda telah ditugaskan pada slot ini oleh manager'};
+  const n=slotCount(ds,shift);
   if(n>=DB.settings.maxPerShift)return {ok:false,msg:'Slot penuh (had '+DB.settings.maxPerShift+' staff/syif)'};
   const {error}=await SB.from('bookings').insert({staff_id:ME.id,date:ds,shift:shift,status:'pending'});
-  if(error)return {ok:false,msg:friendly(error)}; /* trigger DB turut menguatkuasakan peraturan ini */
+  if(error)return {ok:false,msg:friendly(error)};
   await logAudit('booking_submit',fmtDateDS(ds)+' · '+(shift==='morning'?'Pagi':'Petang'));
   await notifyManagers('📋 '+ME.name+' menempah '+fmtDateDS(ds)+' ('+(shift==='morning'?'Pagi':'Petang')+').');
   return {ok:true};
@@ -460,19 +485,19 @@ async function submitBooking(ds,shift){
 async function bookSlot(ds,shift){
   const r=await submitBooking(ds,shift);
   toast(r.ok?'✅ Permohonan tempahan dihantar untuk kelulusan manager':r.msg,r.ok?'ok':'err');
-  if(r.ok){closeModal();await sync();render()}
+  if(r.ok){closeModal();delete DB.slotMonths[monthKey(ds)];await sync();render()}
 }
 async function cancelBooking(id){
   const b=DB.bookings.find(x=>x.id===id);
-  if(!ME||!b||b.staffId!==ME.id||b.status!=='pending'||monthPublished(monthKey(b.date)))return toast('Tidak boleh dibatalkan — hubungi manager','err');
+  if(!ME||!b||b.staffId!==ME.id||b.status!=='pending'||periodPublished(periodOf(b.date)))return toast('Tidak boleh dibatalkan — hubungi manager','err');
   const {error}=await SB.from('bookings').delete().eq('id',id);
   if(error)return toast(friendly(error),'err');
   await logAudit('booking_cancel',fmtDateDS(b.date)+' · '+(b.shift==='morning'?'Pagi':'Petang'));
-  closeModal();await sync();render();toast('Tempahan dibatalkan','ok');
+  closeModal();delete DB.slotMonths[monthKey(b.date)];await sync();render();toast('Tempahan dibatalkan','ok');
 }
 async function mgrSetBooking(id,status){
   const u=reqMgr();if(!u)return;const b=DB.bookings.find(x=>x.id===id);if(!b)return;
-  if(monthPublished(monthKey(b.date)))return toast('Bulan ini telah dikunci','err');
+  if(periodPublished(periodOf(b.date)))return toast('Tempoh ini telah dikunci','err');
   if(status==='approved'){
     const ap=DB.bookings.filter(x=>x.date===b.date&&x.shift===b.shift&&x.status==='approved').length;
     if(ap>=DB.settings.maxPerShift)return toast('Had maksimum '+DB.settings.maxPerShift+' staff/syif dicapai — tolak permohonan lain','err');
@@ -483,20 +508,22 @@ async function mgrSetBooking(id,status){
   await logAudit('booking_'+status,fmtDateDS(b.date)+' · '+(b.shift==='morning'?'Pagi':'Petang'));
   await sync();render();
 }
-function confirmPublish(){const mk=ROUTE.bmk;if(monthPublished(mk))return;
-  const bks=DB.bookings.filter(b=>monthKey(b.date)===mk);
-  const ap=bks.filter(b=>b.status==='approved').length,pd=bks.filter(b=>b.status==='pending').length;
-  openModal('Keluarkan Jadual — '+monthLabel(mk),
+function confirmPublish(){const pk=ROUTE.bpk;if(periodPublished(pk))return;
+  const b=periodBounds(pk);
+  const bks=DB.bookings.filter(x=>x.date>=b[0]&&x.date<=b[1]);
+  const ap=bks.filter(x=>x.status==='approved').length,pd=bks.filter(x=>x.status==='pending').length;
+  openModal('Keluarkan Jadual — '+periodLabel(pk),
+   '<div class="detailrow"><span>Tempoh</span><b>'+periodLabel(pk)+'</b></div>'+
    '<div class="detailrow"><span>Slot disahkan</span><b>'+ap+'</b></div>'+
    '<div class="detailrow"><span>Menunggu (akan ditanda Tidak Dipilih)</span><b>'+pd+'</b></div>'+
-   '<div class="notice warn">Selepas dikeluarkan, jadual <b>dikunci</b> — sebarang perubahan hanya melalui modul Pertukaran Syif (PRD 5.3).</div>'+
-   '<button class="btn btn-primary btn-big" onclick="publishMonth(\''+mk+'\')">🔒 Sahkan & Keluarkan Jadual</button>');}
-async function publishMonth(mk){
+   '<div class="notice warn">Selepas dikeluarkan, jadual tempoh ini <b>dikunci</b> — sebarang perubahan hanya melalui Pertukaran Syif atau tugasan terus oleh Manager (PRD 5.3).</div>'+
+   '<button class="btn btn-primary btn-big" onclick="publishPeriodJS(\''+pk+'\')">🔒 Sahkan & Keluarkan Jadual</button>');}
+async function publishPeriodJS(pk){
   const u=reqMgr();if(!u)return;
-  if(DB.published[mk])return toast('Jadual bulan ini sudah dikeluarkan','err');
-  const {error}=await SB.rpc('publish_month',{p_month:mk,p_label:monthLabel(mk)});
+  if(DB.published[pk])return toast('Jadual tempoh ini sudah dikeluarkan','err');
+  const {error}=await SB.rpc('publish_period',{p_period:pk,p_label:periodLabel(pk)});
   if(error)return toast(friendly(error),'err');
-  closeModal();await sync();render();toast('Jadual '+monthLabel(mk)+' dikeluarkan & dikunci 🔒','ok');
+  closeModal();await sync();render();toast('Jadual '+periodLabel(pk)+' dikeluarkan & dikunci 🔒','ok');
 }
 async function toggleNoShow(eid){
   const u=reqMgr();if(!u)return;const e=DB.schedule.find(x=>x.id===eid);if(!e)return;
@@ -504,6 +531,41 @@ async function toggleNoShow(eid){
   if(error)return toast(friendly(error),'err');
   await logAudit('attendance_'+(!e.noShow?'noshow':'present'),dShort(e.date)+' '+(e.shift==='morning'?'Pagi':'Petang')+' · '+(usernameOf(e.staffId)||'?'));
   await sync();render();
+}
+
+/* ---------- 7b. MANAGER: ASSIGN / BUANG TUGASAN (slot kosong + tarikh lampau) ---------- */
+function openAssignModal(ds,shift){
+  const u=reqMgr();if(!u)return;
+  const existing=DB.schedule.filter(e=>e.date===ds&&e.shift===shift).map(e=>e.staffId);
+  const cands=DB.users.filter(x=>x.role==='staff'&&x.active!==false&&!existing.includes(x.id));
+  const past=ds<todayStr();
+  let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div>'+
+  '<div class="detailrow"><span>Syif</span><b>'+(shift==='morning'?'☀ Pagi · 10:00–16:00':'🌙 Petang · 16:00–22:00')+'</b></div>'+
+  '<div class="detailrow"><span>Ditugaskan</span><b>'+existing.length+' / maks '+DB.settings.maxPerShift+'</b></div>';
+  if(past)body+='<div class="notice warn">🚨 Tarikh LAMPAU — tugasan ini untuk <b>rekod kecemasan</b> (staff tak hadir, cari ganti segera dsb.). Ia memberi kesan kepada pengiraan gaji staff ini secara <b>retrospektif</b> (jam × kadar ikut jualan syif berkenaan).</div>';
+  if(!cands.length)body+='<div class="notice">Tiada staff lain yang boleh ditugaskan untuk slot ini.</div>';
+  else body+='<h3 style="margin-top:12px">Pilih staff untuk ditugaskan</h3>'+cands.map(s=>{
+    const other=DB.schedule.some(e=>e.date===ds&&e.staffId===s.id&&e.shift!==shift);
+    return '<div class="brow"><div><b>'+esc(s.name)+'</b>'+(other?' <span class="chip chip-wait">⚠ sudah ada syif lain hari ini</span>':'')+
+    '<div class="chips" style="margin-top:4px"><span class="chip">'+esc(s.username)+'</span><span class="chip '+(s.payCycle==='monthly'?'chip-ok':'chip-wait')+'">'+(s.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span></div></div>'+
+    '<button class="btn btn-sm btn-ok" onclick="mgrAssign(\''+ds+'\',\''+shift+'\',\''+s.id+'\')">➕ Tugaskan</button></div>';
+  }).join('');
+  openModal('Tugaskan Staff ke Slot',body);
+}
+async function mgrAssign(ds,shift,staffId){
+  const u=reqMgr();if(!u)return;
+  if(ds<todayStr()&&!confirm('Tugaskan pada tarikh LAMPAU ('+fmtDateDS(ds)+')?\n\nUntuk rekod kecemasan — gaji staff akan dikira termasuk syif ini (retrospektif).'))return;
+  const {error}=await SB.rpc('mgr_assign_shift',{p_date:ds,p_shift:shift,p_staff:staffId});
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();toast('Staff ditugaskan ✔','ok');
+}
+async function mgrRemoveAssign(eid){
+  const u=reqMgr();if(!u)return;const e=DB.schedule.find(x=>x.id===eid);if(!e)return;
+  const st=DB.users.find(x=>x.id===e.staffId);
+  if(!confirm('Buang tugasan '+(st?st.name:'staff')+' dari '+fmtDateDS(e.date)+' ('+(e.shift==='morning'?'Pagi':'Petang')+')?\n\nJika tarikh lampau, gaji mereka untuk syif ini akan dikira semula TANPA syif ini.'))return;
+  const {error}=await SB.rpc('mgr_unassign_shift',{p_entry:eid});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Tugasan dibuang','ok');
 }
 
 /* ---------- 8. MODUL PERTUKARAN SYIF (PRD 5.4) ---------- */
@@ -578,11 +640,12 @@ async function setSaleSubmit(){
   ROUTE.saleEdit=null;await sync();render();toast('Jualan disimpan ✔','ok');}
 function editSale(date,shift){ROUTE.saleEdit={date:date,shift:shift};render();}
 
-/* ---------- 10. PENGURUSAN STAF (RPC server-side) ---------- */
+/* ---------- 10. PENGURUSAN STAF ---------- */
 function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   openModal('Tambah Akaun Baharu',
+  '<div class="notice info">2 langkah (cara rasmi Supabase): <b>1)</b> Cipta akaun dahulu di Supabase Dashboard → Authentication → Users → Add user — Email: <b>username@soobeh.app</b>, Password: <b>PIN-soobeh</b> (contoh: 5678-soobeh), tandakan ✓ Auto Confirm. <b>2)</b> Kemudian tekan butang di bawah.</div>'+
   '<label class="field"><span>Nama penuh</span><input id="nsName" placeholder="cth: Fatimah binti Omar"></label>'+
-  '<label class="field"><span>Username (ID pekerja ringkas)</span><input id="nsUser" autocapitalize="none" placeholder="cth: fatimah05"></label>'+
+  '<label class="field"><span>Username (mest sama seperti email di Dashboard, tanpa @soobeh.app)</span><input id="nsUser" autocapitalize="none" placeholder="cth: fatimah05"></label>'+
   '<label class="field"><span>No. telefon</span><input id="nsPhone" placeholder="cth: 012-345 6789"></label>'+
   '<label class="field"><span>PIN awal (4–6 digit)</span><input id="nsPin" inputmode="numeric" maxlength="6" placeholder="cth: 5678"></label>'+
   '<label class="field"><span>Kitaran gaji</span><select id="nsCycle"><option value="monthly">Bulanan (1hb – akhir bulan)</option><option value="biweekly">Setiap 2 Minggu (1–14, 15–akhir)</option></select></label>'+
@@ -602,7 +665,7 @@ async function submitAddStaff(){
   closeModal();await sync();render();toast('Akaun '+un+' ditambah ✔','ok');}
 function openResetPin(id){ROUTE.resetId=id;const t=DB.users.find(x=>x.id===id);if(!t)return;
   openModal('Set Semula PIN — '+esc(t.name),
-  '<div class="notice info">Proses rasmi apabila staff terlupa PIN — tanpa OTP/emel (PRD 5.1). Staff akan dimaklumkan melalui notifikasi. Kata laluan baharu dihash (bcrypt) di server Supabase.</div>'+
+  '<div class="notice info">Proses rasmi apabila staff terlupa PIN — tanpa OTP/emel (PRD 5.1). Kata laluan baharu dihash (bcrypt) di server Supabase Auth.</div>'+
   '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="rpPin" inputmode="numeric" maxlength="6"></label>'+
   '<button class="btn btn-primary btn-big" onclick="submitResetPin()">Simpan PIN Baharu</button>');}
 async function submitResetPin(){
@@ -644,7 +707,7 @@ async function changeMyPin(){
   await logAudit('pin_change',u.username);
   toast('PIN berjaya ditukar ✔','ok');closeModal();render();}
 
-/* ---------- 11. TETAPAN (Admin — PRD NFR: boleh konfigur tanpa kod) ---------- */
+/* ---------- 11. TETAPAN (Admin) ---------- */
 async function saveSettings(){
   const me=currentUser();if(!me||me.role!=='admin')return toast('Akses admin sahaja','err');
   const g=id=>parseFloat($('#'+id).value);
@@ -667,7 +730,7 @@ function closeModal(){const r=$('#modalRoot');r.classList.remove('open');r.inner
 function modalBackdrop(e){if(e.target.id==='modalRoot')closeModal();}
 
 /* ---------- 13. ROUTER ---------- */
-let ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};
+let ROUTE=freshROUTE();
 function render(){
   const app=$('#app');
   if(ROUTE.view==='setup'){app.innerHTML=setupHTML();return}
@@ -678,17 +741,17 @@ function render(){
     if(u.role==='staff'){ROUTE.view='staff';renderStaffShell();}
     else{ROUTE.view='manager';renderManagerShell();}}
 }
-function goLogin(p){ROUTE={view:'login',portal:p,tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};pinBuf='';render();}
+function goLogin(p){ROUTE=Object.assign(freshROUTE(),{view:'login',portal:p});pinBuf='';render();}
 function goBackLanding(){ROUTE.view='landing';render();}
 function setTab(t){ROUTE.tab=t;render()}
 function setMTab(t){ROUTE.mtab=t;render()}
-async function calNav(d){ROUTE.mk=shiftMonth(ROUTE.mk||monthKey(todayStr()),d);await loadSlotCounts(ROUTE.mk);render()}
-function bNav(d){ROUTE.bmk=shiftMonth(ROUTE.bmk,d);render()}
-function sNav(d){ROUTE.smk=shiftMonth(ROUTE.smk,d);render()}
+function calNav(d){ROUTE.pk=shiftPeriod(ROUTE.pk||curPeriod(),d);render()}
+function bNav(d){ROUTE.bpk=shiftPeriod(ROUTE.bpk,d);render()}
+function sNav(d){ROUTE.spk=shiftPeriod(ROUTE.spk,d);render()}
 function pNav(d){ROUTE.pmk=shiftMonth(ROUTE.pmk,d);render()}
-function defaultBookMonth(){const c=monthKey(todayStr());return monthPublished(c)?shiftMonth(c,1):c}
+function defaultBookPeriod(){const c=curPeriod();return periodPublished(c)?nextPeriod(c):c}
 
-/* ---------- 14. LOG MASUK (PRD 5.1 — PIN + keypad besar) ---------- */
+/* ---------- 14. LOG MASUK ---------- */
 let pinBuf='',failCount=0,lockUntil=0;
 function renderDots(){const w=$('#pinDots');if(!w)return;
   w.innerHTML=Array.from({length:6},(_,i)=>'<span class="dot'+(i<pinBuf.length?' on':'')+'"></span>').join('');}
@@ -706,7 +769,8 @@ function mapAuthErr(e,left){
   const m=(e&&e.message)||'';
   if(/Invalid login credentials/i.test(m))return 'ID atau PIN salah. ('+left+' percubaan lagi)';
   if(/rate|security purposes|too many/i.test(m))return '🔒 Terlalu banyak percubaan — tunggu sebentar (perlindungan Supabase Auth).';
-  if(/not confirmed/i.test(m))return 'Akaun belum disahkan — hubungi manager.';
+  if(/not confirmed/i.test(m))return 'Akaun belum disahkan — semak ✓ Auto Confirm di Dashboard.';
+  if(/Database error/i.test(m))return 'Ralat database — jalankan 05_upgrade_2week.sql di Supabase SQL Editor.';
   return m||'Log masuk gagal';
 }
 async function doLogin(){
@@ -715,7 +779,6 @@ async function doLogin(){
   if(!username||pin.length<4)return showErr('Sila masukkan ID dan PIN (4–6 digit).');
   if(Date.now()<lockUntil)return showErr('🔒 Cuba lagi dalam '+Math.ceil((lockUntil-Date.now())/1000)+' saat.');
   const portal=ROUTE.portal==='staff'?'staff':'manager';
-  /* PIN = kata laluan Supabase Auth (bcrypt di server); suffix menjaga syarat min 6 aksara */
   const {data,error}=await SB.auth.signInWithPassword({email:username+'@soobeh.app',password:pin+'-soobeh'});
   if(error){
     failCount++;
@@ -729,7 +792,7 @@ async function doLogin(){
   if(portal==='staff'&&prof.role!=='staff'){await SB.auth.signOut();return showErr('Akaun ini perlu log masuk melalui Portal Manager.');}
   if(portal==='manager'&&prof.role==='staff'){await SB.auth.signOut();return showErr('Akaun ini perlu log masuk melalui Portal Staff.');}
   ME=mapProfile(prof);
-  ROUTE={view:prof.role==='staff'?'staff':'manager',portal:portal,tab:'cal',mtab:'dash',mk:monthKey(todayStr()),bmk:null,smk:null,pmk:null,saleEdit:null};
+  ROUTE=Object.assign(freshROUTE(),{view:prof.role==='staff'?'staff':'manager',portal:portal,pk:curPeriod()});
   await loadAll();
   await logAudit('login',ME.username+' log masuk ('+ME.role+')');
   pinBuf='';
@@ -739,13 +802,13 @@ async function doLogin(){
 /* ---------- 15. SKRIN UTAMA & LOG MASUK ---------- */
 function setupHTML(){return '<div class="loginwrap"><div class="loginbox glass"><div class="logo big">⚙️</div><h2>Tetapan Diperlukan</h2><p style="opacity:.8">Fail <b>config.js</b> belum dikonfigurasi.</p><ol style="text-align:left;opacity:.85"><li>Buka akaun Supabase anda → <b>Settings → API</b></li><li>Salin <b>Project URL</b> &amp; <b>anon public key</b></li><li>Tampal ke dalam <b>config.js</b></li><li>Muat naik semula ke GitHub — Vercel akan auto-deploy semula</li></ol></div></div>';}
 function landingHTML(){return '<div class="landing">'+
- '<div class="hero glass"><div class="logo big">S</div><h1>Soobeh Kiosk</h1>'+
+ '<div class="hero glass"><div class="logo big">S</div><h1>Soobeh TBG</h1>'+
  '<p>Sistem Jadual Syif, Pertukaran Syif &amp; Pengiraan Gaji</p>'+
- '<div class="badges"><span class="chip chip-info">☁️ Supabase Database</span><span class="chip chip-info">🔐 RLS + Auth berenkripsi</span><span class="chip chip-info">📱 Mobile-first</span><span class="chip chip-info">🧾 Slip gaji PDF</span></div></div>'+
+ '<div class="badges"><span class="chip chip-info">☁️ Supabase Database</span><span class="chip chip-info">🗓️ Kitaran 2 minggu</span><span class="chip chip-info">🔐 RLS + Auth berenkripsi</span><span class="chip chip-info">🧾 Slip gaji PDF</span></div></div>'+
  '<div class="portalgrid">'+
- '<button class="portal glass" onclick="goLogin(\'staff\')"><div class="p-ic">👷</div><h2>Portal Staff</h2><p>Tempah syif · lihat jadual · mohon tukar syif · slip gaji</p><span class="btn btn-primary">Log Masuk →</span></button>'+
- '<button class="portal glass" onclick="goLogin(\'manager\')"><div class="p-ic">👔</div><h2>Portal Manager</h2><p>Sahkan jadual · input jualan · lulus tukar syif · jana gaji</p><span class="btn btn-primary">Log Masuk →</span></button></div>'+
- '<p class="foot">Soobeh Shift &amp; Payroll System · Fasa 1 · v1.0 · Data disimpan di Supabase (cloud)</p></div>';}
+ '<button class="portal glass" onclick="goLogin(\'staff\')"><div class="p-ic">👷</div><h2>Portal Staff</h2><p>Tempah syif (2 kali sebulan) · jadual · tukar syif · slip gaji</p><span class="btn btn-primary">Log Masuk →</span></button>'+
+ '<button class="portal glass" onclick="goLogin(\'manager\')"><div class="p-ic">👔</div><h2>Portal Manager</h2><p>Sahkan jadual · assign staff · input jualan · jana gaji</p><span class="btn btn-primary">Log Masuk →</span></button></div>'+
+ '<p class="foot">Soobeh Shift &amp; Payroll System · Fasa 1 · Kitaran tempohan 2 minggu (Tempoh 1: 1–15 · Tempoh 2: 16–akhir bulan)</p></div>';}
 function loginHTML(){const st=ROUTE.portal==='staff';
  return '<div class="loginwrap"><button class="btn btn-sm ghost" onclick="goBackLanding()">← Kembali</button>'+
  '<div class="loginbox glass"><div class="logo big">'+(st?'👷':'👔')+'</div><h2>'+(st?'Portal Staff':'Portal Manager / Admin')+'</h2>'+
@@ -760,9 +823,8 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<div class="tblwrap"><table class="tbl"><tr><th>Peranan</th><th>ID</th><th>PIN</th></tr>'+
  '<tr><td>Staff (Bulanan)</td><td>ali01</td><td>1234</td></tr><tr><td>Staff (2-Minggu)</td><td>minah02</td><td>1111</td></tr>'+
  '<tr><td>Staff (2-Minggu)</td><td>chong03</td><td>2222</td></tr><tr><td>Staff (Bulanan)</td><td>sarah04</td><td>3333</td></tr>'+
- '<tr><td>Manager</td><td>aida05</td><td>9999</td></tr><tr><td>Manager</td><td>boyan06</td><td>8888</td></tr>'+
- '<tr><td>Manager</td><td>ravi07</td><td>7777</td></tr><tr><td>Admin (Pengusaha)</td><td>boss00</td><td>0000</td></tr></table></div>'+
- '<small>Dipaparkan untuk ujian demo sahaja — dalam produksi, senarai ini perlu dibuang dan PIN dihantar secara peribadi. Untuk reset data demo: jalankan semula <b>01_schema.sql</b> + <b>02_seed.sql</b> di Supabase SQL Editor.</small></div></details></div>';}
+ '<tr><td>Manager</td><td>aida05</td><td>9999</td></tr><tr><td>Admin (Pengusaha)</td><td>boss00</td><td>0000</td></tr></table></div>'+
+ '<small>Dipaparkan untuk ujian demo sahaja — dalam produksi, senarai ini perlu dibuang.</small></div></details></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
 const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
@@ -777,16 +839,17 @@ function renderStaffShell(){
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
   ({cal:renderStaffCalendar,jad:renderStaffJadual,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
 }
-function slotPill(ds,shift,pub){
+function slotPill(ds,shift,pub,locked){
   const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
-  if(pub){
+  if(locked){cls='none'}
+  else if(pub){
     const es=DB.schedule.filter(e=>e.date===ds&&e.shift===shift);
     const mine=es.some(e=>e.staffId===ME.id);
     mark=(mine?'✔':'')+(es.length||'');
     cls=mine?'ok':(es.length?'taken':'none');
   }else{
     const mine=DB.bookings.find(b=>b.date===ds&&b.shift===shift&&b.staffId===ME.id);
-    const n=DB.slotCounts[ds+'|'+shift]||0; /* kiraan rakan — tanpa nama (RPC slot_counts) */
+    const n=slotCount(ds,shift);
     mark=(mine?(mine.status==='rejected'?'✕':'✔'):'')+(n||'');
     cls=mine?(mine.status==='approved'?'ok':mine.status==='pending'?'wait':'no'):(n?'taken':'free');
   }
@@ -794,30 +857,33 @@ function slotPill(ds,shift,pub){
 }
 function renderStaffCalendar(){
   const u=currentUser();
-  if(!ROUTE.mk)ROUTE.mk=monthKey(todayStr());
-  const mk=ROUTE.mk,pub=monthPublished(mk);
-  let cells='';['Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu','Ahad'].forEach(d=>cells+='<div class="cal-dow">'+d.slice(0,3)+'</div>');
-  const p=mk.split('-'),off=(new Date(+p[0],+p[1]-1,1).getDay()+6)%7,dim=daysInMonth(mk);
+  if(!ROUTE.pk)ROUTE.pk=curPeriod();
+  const pk=ROUTE.pk,pub=periodPublished(pk),b=periodBounds(pk),winEnd=bookingWindowEnd();
+  let cells='';DOW.forEach(d=>cells+='<div class="cal-dow">'+d+'</div>');
+  const off=(new Date(b[0]+'T00:00:00').getDay()+6)%7;
   for(let i=0;i<off;i++)cells+='<div class="cal-cell blank"></div>';
-  for(let d=1;d<=dim;d++){const ds=mk+'-'+pad2(d),past=ds<todayStr();
-    cells+='<div class="cal-cell'+(past?' past':'')+'"><div class="cal-day">'+d+'</div>'+slotPill(ds,'morning',pub)+slotPill(ds,'evening',pub)+'</div>';}
+  const mk=pk.slice(0,7),d1=pk.endsWith('A')?1:16,d2=+b[1].slice(8,10);
+  for(let d=d1;d<=d2;d++){const ds=mk+'-'+pad2(d);
+    const past=ds<todayStr(),locked=!pub&&ds>winEnd;
+    cells+='<div class="cal-cell'+(past?' past':'')+(locked?' locked':'')+'"><div class="cal-day">'+d+(ds===todayStr()?' •':'')+'</div>'+slotPill(ds,'morning',pub,locked)+slotPill(ds,'evening',pub,locked)+'</div>';}
+  ensureSlotCounts(mk);
   const est=estimateFor(u.id);
   $('#viewRoot').innerHTML=
-  '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
-  (pub?'<div class="notice ok">🔒 Jadual rasmi telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
-      :'<div class="notice info">💡 Tekan slot untuk menempah. Status: <span class="chip chip-wait">Menunggu Kelulusan</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> — had '+DB.settings.maxPerShift+' staff/syif.</div>')+
+  '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
+  (pub?'<div class="notice ok">🔒 Jadual rasmi tempoh ini telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
+      :'<div class="notice info">🗓️ Kitaran <b>2 minggu</b>: Tempoh 1 (1–15) &amp; Tempoh 2 (16–akhir bulan). Anda boleh menempah untuk <b>tempoh semasa &amp; tempoh seterusnya</b> sahaja — sehingga <b>'+dShort(winEnd)+'</b>. Status: <span class="chip chip-wait">Menunggu</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> · had '+DB.settings.maxPerShift+' staff/syif.</div>')+
   '<div class="cal-grid glass">'+cells+'</div>'+
   '<div class="card glass"><h3>Ringkasan Bulan Semasa</h3><div class="statrow">'+
   '<div class="stat"><small>Syif (bulan ini)</small><b>'+est.c.shifts.length+'</b></div>'+
   '<div class="stat"><small>Jam bekerja</small><b>'+est.c.totalHours+'</b></div>'+
   '<div class="stat"><small>Anggaran gaji</small><b>'+rm(est.total)+'</b></div></div>'+
-  '<p class="hint">Anggaran termasuk bonus/elaun jika terus layak hingga akhir bulan. Slip rasmi dijana oleh manager pada akhir kitaran anda.</p></div>';
+  '<p class="hint">Slot yang dikelabu = tempoh yang belum dibuka untuk tempahan. Slip rasmi dijana oleh manager pada akhir kitaran gaji anda.</p></div>';
 }
 function bookingChip(st){return st==='approved'?'<span class="chip chip-ok">Disahkan</span>':st==='pending'?'<span class="chip chip-wait">Menunggu Kelulusan</span>':'<span class="chip chip-no">Tidak Dipilih</span>'}
 function openSlot(ds,shift){
-  const u=currentUser(),pub=monthPublished(monthKey(ds)),past=ds<todayStr();
+  const u=currentUser(),pk=periodOf(ds),pub=periodPublished(pk),past=ds<todayStr(),winEnd=bookingWindowEnd();
   const shName=shift==='morning'?'Syif Pagi · 10:00–16:00':'Syif Petang · 16:00–22:00';
-  let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div><div class="detailrow"><span>Syif</span><b>'+shName+'</b></div>';
+  let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div><div class="detailrow"><span>Syif</span><b>'+shName+'</b></div><div class="detailrow"><span>Tempoh</span><b>'+periodLabel(pk)+'</b></div>';
   if(pub){
     const es=DB.schedule.filter(e=>e.date===ds&&e.shift===shift),mine=es.find(e=>e.staffId===u.id);
     const sale=getSale(ds,shift);
@@ -827,8 +893,10 @@ function openSlot(ds,shift){
     if(mine&&!past)body+='<button class="btn btn-primary btn-big" onclick="closeModal();openSwapModal(\''+mine.id+'\')">🔄 Mohon Tukar Syif Ini</button>';
   }else if(past){
     body+='<div class="notice">Tarikh lampau — tempahan telah tertutup.</div>';
+  }else if(ds>winEnd){
+    body+='<div class="notice warn">🔒 Tempoh ini <b>belum dibuka</b> untuk tempahan. Tempahan dibenarkan untuk tempoh semasa &amp; tempoh seterusnya sahaja (hingga '+dShort(winEnd)+').</div>';
   }else{
-    const n=DB.slotCounts[ds+'|'+shift]||0;
+    const n=slotCount(ds,shift);
     const mine=DB.bookings.find(b=>b.date===ds&&b.shift===shift&&b.staffId===u.id);
     body+='<div class="detailrow"><span>Tempahan slot ini (termasuk anda)</span><b>'+n+' daripada maks '+DB.settings.maxPerShift+'</b></div>';
     if(mine&&(mine.status==='pending'||mine.status==='approved')){
@@ -837,7 +905,7 @@ function openSlot(ds,shift){
     }else if(n>=DB.settings.maxPerShift){
       body+='<div class="notice warn">Slot ini telah penuh (had '+DB.settings.maxPerShift+' staff).</div>';
     }else{
-      body+='<button class="btn btn-ok btn-big" onclick="bookSlot(\''+ds+'\',\''+shift+'\')">'+(mine?' Tempah Semula':'✔ Tempah Syif Ini')+'</button>';
+      body+='<button class="btn btn-ok btn-big" onclick="bookSlot(\''+ds+'\',\''+shift+'\')">✔ Tempah Syif Ini</button>';
     }
   }
   openModal('Butiran Slot',body);
@@ -845,13 +913,19 @@ function openSlot(ds,shift){
 function renderStaffJadual(){
   const u=currentUser(),S=DB.settings;
   const sched=DB.schedule.filter(e=>e.staffId===u.id).sort((a,b)=>a.date.localeCompare(b.date));
-  const months=[...new Set(sched.map(e=>e.monthKey))].sort((a,b)=>b.localeCompare(a));
+  const open=DB.bookings.filter(b=>b.staffId===u.id&&!periodPublished(periodOf(b.date))).sort((a,b)=>a.date.localeCompare(b.date));
   let html='<div class="pagehead"><h2>🗓️ Jadual Saya</h2></div>';
-  const open=DB.bookings.filter(b=>b.staffId===u.id&&!monthPublished(monthKey(b.date))).sort((a,b)=>a.date.localeCompare(b.date));
-  if(open.length)html+='<div class="card glass"><h3>Permohonan Belum Dikeluarkan</h3>'+open.map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip(b.status)+'</div>').join('')+'<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi.</p></div>';
-  months.forEach(mk=>{
-    html+='<div class="card glass"><h3>'+monthLabel(mk)+' · Jadual Rasmi</h3>';
-    sched.filter(e=>e.monthKey===mk).forEach(e=>{
+  if(open.length){
+    const groups={};open.forEach(b=>{(groups[periodOf(b.date)]=groups[periodOf(b.date)]||[]).push(b)});
+    Object.keys(groups).sort().forEach(pk=>{
+      html+='<div class="card glass"><h3>'+periodLabel(pk)+' · Tempahan</h3>'+groups[pk].map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip(b.status)+'</div>').join('')+'<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi untuk tempoh ini.</p></div>';
+    });
+  }
+  const pkeys=[...new Set(sched.map(e=>periodOf(e.date)))].sort();
+  pkeys.forEach(pk=>{
+    const b=periodBounds(pk),pub=periodPublished(pk);
+    html+='<div class="card glass"><h3>'+periodLabel(pk)+' · '+(pub?'Jadual Rasmi':'Tugasan Manager')+' '+(pub?'':'<span class="chip chip-wait">tempoh belum diterbitkan</span>')+'</h3>';
+    sched.filter(e=>e.date>=b[0]&&e.date<=b[1]).forEach(e=>{
       const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null,past=e.date<todayStr();
       html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10–4':'🌙 Petang 4–10')+'</span>'+
       (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
@@ -887,7 +961,7 @@ function renderStaffSlips(){
   '<div class="detailrow"><span>Bonus kehadiran</span><b>'+(est.att.ok?rm(S.attBonus)+' ✔':'— '+esc(est.att.why||''))+'</b></div>'+
   '<div class="detailrow"><span>Elaun typhoid</span><b>'+(u.typhoidCount<S.typhoidMax?rm(S.typhoidAllowance)+' ('+(u.typhoidCount+1)+'/'+S.typhoidMax+')':'— ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)')+'</b></div>'+
   '<div class="ps-totalbox"><span>ANGGARAN JUMLAH</span><span>'+rm(est.total)+'</span></div>'+
-  '<p class="hint">Anggaran masa nyata (ciri tambahan) — slip rasmi dijana oleh manager pada akhir kitaran anda ('+(u.payCycle==='monthly'?'bulanan':'2-mingguan')+').</p></div>'+
+  '<p class="hint">Anggaran masa nyata — slip rasmi dijana oleh manager pada akhir kitaran gaji anda ('+(u.payCycle==='monthly'?'bulanan':'2-mingguan')+'). Tugasan kecemasan manager pada tarikh lampau turut dikira.</p></div>'+
   '<div class="card glass"><h3>Sejarah Slip Rasmi</h3>'+
   (slips.length?slips.map(p=>'<div class="brow" style="cursor:pointer" onclick="viewSlip(\''+p.id+'\')"><div><b>'+dShort(p.start)+' – '+dShort(p.end)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(p.cycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip chip-ok">'+p.shiftCount+' syif · '+p.hours+' jam</span><span class="chip">💉 '+(p.typh?'bayaran '+p.typhNo+'/'+S.typhoidMax:'—')+'</span></div></div><b class="amt">'+rm(p.total)+'</b></div>').join(''):'<p style="opacity:.75">Belum ada slip dijana untuk anda lagi.</p>')+
   '<p class="hint">Tekan mana-mana slip untuk butiran penuh &amp; muat turun PDF.</p></div>';
@@ -912,7 +986,7 @@ function renderStaffProfile(){
 }
 
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual Rasmi'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -938,18 +1012,19 @@ function salesChartHTML(){
   return '<div class="chart">'+data.map(x=>'<div class="chart-col" title="'+x.ds+' · Pagi RM '+x.m.toFixed(0)+' / Petang RM '+x.e.toFixed(0)+'"><div class="bars"><div class="bar bm" style="height:'+Math.max(3,x.m/max*100)+'%"></div><div class="bar be" style="height:'+Math.max(3,x.e/max*100)+'%"></div></div><small>'+(+x.ds.slice(8,10))+'</small></div>').join('')+'</div>';
 }
 function renderMDash(){
-  const mk=monthKey(todayStr()),S=DB.settings;
+  const mk=monthKey(todayStr()),S=DB.settings,cp=curPeriod();
   const staff=DB.users.filter(u=>u.role==='staff'&&u.active!==false);
-  const pendB=DB.bookings.filter(b=>b.status==='pending'&&!monthPublished(monthKey(b.date))).length;
+  const pendB=DB.bookings.filter(b=>b.status==='pending'&&!periodPublished(periodOf(b.date))).length;
   const swP=DB.swaps.filter(s=>s.status==='pending_peer').length;
   const swM=DB.swaps.filter(s=>s.status==='pending_manager').length;
   let est=0;
   const rows=staff.map(u=>{const sc=scheduledEntries(u.id,mk),att=sc.filter(e=>!e.noShow).length;est+=estimateFor(u.id).total;return {u:u,sc:sc.length,att:att,hours:att*S.shiftHours}});
   $('#viewRoot').innerHTML='<div class="pagehead"><h2>📊 Dashboard Manager</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
+  '<div class="notice info">🗓️ Tempoh semasa: <b>'+periodLabel(cp)+'</b> — '+(periodPublished(cp)?'<span class="chip chip-ok">Diterbitkan</span>':'<span class="chip chip-wait">Belum diterbitkan</span>')+' · Staff boleh menempah hingga <b>'+dShort(bookingWindowEnd())+'</b> (tempoh semasa + seterusnya).</div>'+
   '<div class="statgrid">'+
   '<div class="card glass"><h3>📅 Kehadiran Bulan Semasa <small>+ penanda kitaran gaji (PRD 5.6a)</small></h3><div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Kitaran</th><th>Syif</th><th>Hadir</th><th>Jam</th></tr>'+
   rows.map(r=>'<tr><td>'+esc(r.u.name)+'</td><td><span class="chip '+(r.u.payCycle==='monthly'?'chip-ok':'chip-wait')+'">'+(r.u.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span></td><td>'+r.sc+'</td><td>'+r.att+'</td><td>'+r.hours+'</td></tr>').join('')+'</table></div></div>'+
-  '<div class="card glass"><h3>💰 Anggaran Gaji Bulan Semasa</h3><div class="bigtotal">'+rm(est)+'</div><p class="hint">Anggaran setakat hari ini — termasuk bonus &amp; elaun jika kekal layak hingga akhir bulan.</p>'+
+  '<div class="card glass"><h3>💰 Anggaran Gaji Bulan Semasa</h3><div class="bigtotal">'+rm(est)+'</div><p class="hint">Anggaran setakat hari ini — termasuk bonus &amp; elaun jika kekal layak hingga akhir bulan, dan tugasan kecemasan tarikh lampau.</p>'+
   '<div class="chips" style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="setMTab(\'gaji\')">🧾 Jana Slip</button><button class="btn btn-sm" onclick="setMTab(\'jual\')">💰 Input Jualan</button></div></div>'+
   '<div class="card glass"><h3>⏳ Permohonan Tertunggak</h3>'+
   '<div class="detailrow"><span>Tempahan menunggu pengesahan</span><b>'+pendB+' <button class="btn btn-sm" onclick="setMTab(\'temp\')">Semak →</button></b></div>'+
@@ -959,69 +1034,77 @@ function renderMDash(){
   '<div class="chips" style="margin-top:8px"><span class="chip" style="background:rgba(251,191,36,.2)">☀ Pagi</span><span class="chip" style="background:rgba(129,140,248,.2)">🌙 Petang</span></div></div>';
 }
 function renderMBookings(){
-  if(!ROUTE.bmk)ROUTE.bmk=defaultBookMonth();
-  const mk=ROUTE.bmk,pub=monthPublished(mk);
-  let html='<div class="pagehead"><h2>✅ Pengesahan &amp; Penjadualan</h2><div class="monthnav glass"><button onclick="bNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="bNav(1)">▶</button></div></div>';
+  if(!ROUTE.bpk)ROUTE.bpk=defaultBookPeriod();
+  const pk=ROUTE.bpk,pub=periodPublished(pk),b=periodBounds(pk);
+  let html='<div class="pagehead"><h2>✅ Pengesahan &amp; Penjadualan</h2><div class="monthnav glass"><button onclick="bNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="bNav(1)">▶</button></div></div>';
   if(pub){
-    html+='<div class="notice ok">🔒 Jadual '+monthLabel(mk)+' telah dikeluarkan pada '+new Date(DB.published[mk].t).toLocaleDateString('ms-MY')+' oleh '+esc(DB.published[mk].by||'')+'. Ia dikunci — perubahan hanya melalui Pertukaran Syif.</div>'+
-    '<button class="btn btn-primary" onclick="setMTab(\'jad\')">🗓️ Lihat Jadual Rasmi</button>';
+    const p=DB.published[pk];
+    html+='<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan pada '+new Date(p.t).toLocaleDateString('ms-MY')+' oleh '+esc(p.by||'')+'. Tempoh ini dikunci — perubahan melalui Pertukaran Syif atau <b>Assign</b> di tab Jadual.</div>'+
+    '<div class="chips"><button class="btn btn-primary" onclick="setMTab(\'jad\')">🗓️ Jadual &amp; Assign Staff</button><button class="btn" onclick="bNav(1)">Tempoh seterusnya →</button></div>';
   }else{
-    const bks=DB.bookings.filter(b=>monthKey(b.date)===mk);
-    const pend=bks.filter(b=>b.status==='pending').length,ap=bks.filter(b=>b.status==='approved').length;
-    html+='<div class="notice info">📊 '+pend+' menunggu kelulusan · '+ap+' disahkan · had '+DB.settings.maxPerShift+' staff/syif (boleh diubah di Tetapan).</div>';
-    const byDate={};bks.forEach(b=>{(byDate[b.date]=byDate[b.date]||[]).push(b)});
+    const bks=DB.bookings.filter(x=>x.date>=b[0]&&x.date<=b[1]);
+    const pend=bks.filter(x=>x.status==='pending').length,ap=bks.filter(x=>x.status==='approved').length;
+    html+='<div class="notice info">📊 '+pend+' menunggu kelulusan · '+ap+' disahkan · had '+DB.settings.maxPerShift+' staff/syif. Tempahan staff dibenarkan hingga '+dShort(bookingWindowEnd())+' (tempoh semasa + seterusnya).</div>';
+    const byDate={};bks.forEach(x=>{(byDate[x.date]=byDate[x.date]||[]).push(x)});
     const order={approved:0,pending:1,rejected:2};
     const dates=Object.keys(byDate).sort();
-    if(!dates.length)html+='<div class="card glass"><p style="opacity:.75">Tiada permohonan tempahan untuk bulan ini.</p></div>';
+    if(!dates.length)html+='<div class="card glass"><p style="opacity:.75">Tiada permohonan tempahan untuk tempoh ini — anda masih boleh <b>assign staff terus</b> di tab Jadual &amp; Assign.</p></div>';
     dates.forEach(ds=>{
       let rows='';
       ['morning','evening'].forEach(sh=>{
-        const sl=byDate[ds].filter(b=>b.shift===sh).sort((a,b)=>order[a.status]-order[b.status]);
+        const sl=byDate[ds].filter(x=>x.shift===sh).sort((a,c)=>order[a.status]-order[c.status]);
         if(!sl.length)return;
-        const apN=sl.filter(b=>b.status==='approved').length;
+        const apN=sl.filter(x=>x.status==='approved').length;
         rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi (10:00–16:00)':'🌙 Syif Petang (16:00–22:00)')+' <span class="chip '+(apN>=DB.settings.maxPerShift?'chip-warn':'chip-info')+'">'+apN+'/'+DB.settings.maxPerShift+' disahkan</span></div>';
-        sl.forEach(b=>{
-          const st=DB.users.find(x=>x.id===b.staffId);
-          rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b><div class="brow-act">'+bookingChip(b.status)+
-          (b.status==='pending'?'<button class="btn btn-sm btn-ok" onclick="mgrSetBooking(\''+b.id+'\',\'approved\')">✔ Sahkan</button><button class="btn btn-sm btn-danger" onclick="mgrSetBooking(\''+b.id+'\',\'rejected\')">✕ Tolak</button>'
-           :b.status==='approved'?'<button class="btn btn-sm" onclick="mgrSetBooking(\''+b.id+'\',\'pending\')">↩ Batal</button>'
-           :'<button class="btn btn-sm" onclick="mgrSetBooking(\''+b.id+'\',\'pending\')">↩ Pulihkan</button>')+'</div></div>';
+        sl.forEach(x=>{
+          const st=DB.users.find(y=>y.id===x.staffId);
+          rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b><div class="brow-act">'+bookingChip(x.status)+
+          (x.status==='pending'?'<button class="btn btn-sm btn-ok" onclick="mgrSetBooking(\''+x.id+'\',\'approved\')">✔ Sahkan</button><button class="btn btn-sm btn-danger" onclick="mgrSetBooking(\''+x.id+'\',\'rejected\')">✕ Tolak</button>'
+           :x.status==='approved'?'<button class="btn btn-sm" onclick="mgrSetBooking(\''+x.id+'\',\'pending\')">↩ Batal</button>'
+           :'<button class="btn btn-sm" onclick="mgrSetBooking(\''+x.id+'\',\'pending\')">↩ Pulihkan</button>')+'</div></div>';
         });
         rows+='</div>';
       });
       html+='<div class="card glass"><h3>'+fmtDateDS(ds)+' '+(isWeekend(ds)?'<span class="chip chip-info">Weekend</span>':'')+(ds<todayStr()?' <span class="chip chip-no">Lampau</span>':'')+'</h3>'+rows+'</div>';
     });
-    html+='<button class="btn btn-primary btn-big" onclick="confirmPublish()">🔒 Keluarkan Jadual '+monthLabel(mk)+'</button>';
+    html+='<button class="btn btn-primary btn-big" onclick="confirmPublish()">🔒 Keluarkan Jadual '+periodLabel(pk)+'</button>';
   }
   $('#viewRoot').innerHTML=html;
 }
 function renderMSchedule(){
-  if(!ROUTE.smk){const c=monthKey(todayStr());ROUTE.smk=monthPublished(c)?c:shiftMonth(c,-1)}
-  const mk=ROUTE.smk,S=DB.settings;
-  let html='<div class="pagehead"><h2>🗓️ Jadual Rasmi &amp; Kehadiran</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
-  if(!monthPublished(mk)){html+='<div class="notice warn">Jadual '+monthLabel(mk)+' belum dikeluarkan. Sahkan tempahan dahulu di tab Tempahan.</div>'}
-  else{
-    const es=DB.schedule.filter(e=>e.monthKey===mk).sort((a,b)=>a.date.localeCompare(b.date));
-    const byDate={};es.forEach(e=>{(byDate[e.date]=byDate[e.date]||[]).push(e)});
-    Object.keys(byDate).sort().forEach(ds=>{
-      let rows='';
-      ['morning','evening'].forEach(sh=>{
-        const sl=byDate[ds].filter(e=>e.shift===sh);if(!sl.length)return;
-        const sale=getSale(ds,sh),rate=sale!=null?shiftRate(ds,sh,sale):null;
-        rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi':'🌙 Syif Petang')+
-        ' '+(sale!=null?'<span class="chip '+(rate>S.baseRate?'chip-ok':'chip-info')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div>';
-        sl.forEach(e=>{
-          const st=DB.users.find(u=>u.id===e.staffId);
-          rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b> '+(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
-          '<div class="brow-act"><button class="btn btn-sm '+(e.noShow?'btn-ok':'btn-danger')+'" onclick="toggleNoShow(\''+e.id+'\')">'+(e.noShow?'↩ Tanda Hadir':'✕ Tanda Tidak Hadir')+'</button></div></div>';
-        });
-        rows+='</div>';
+  if(!ROUTE.spk)ROUTE.spk=curPeriod();
+  const pk=ROUTE.spk,pub=periodPublished(pk),b=periodBounds(pk),S=DB.settings;
+  let html='<div class="pagehead"><h2>🗓️ Jadual Rasmi &amp; Assign Staff</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
+  html+=pub?'<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan &amp; dikunci. Anda masih boleh <b>assign staff ke slot kosong</b> (termasuk tarikh lampau untuk kecemasan) — kesan gaji retrospektif.</div>'
+        :'<div class="notice warn">Tempoh ini <b>belum dikeluarkan</b>. Anda boleh (a) sahkan tempahan &amp; keluarkan jadual di tab Tempahan, ATAU (b) assign staff terus ke slot di bawah.</div>';
+  if(DB.payslips.some(p=>p.monthKey===pk.slice(0,7)))
+    html+='<div class="notice warn">⚠ Terdapat slip gaji telah dijana untuk bulan ini. Jika anda mengubah tugasan tarikh lampau, <b>padam &amp; jana semula slip</b> berkenaan di tab Gaji supaya angka tepat.</div>';
+  let anySlot=false;
+  for(let ds=b[0];ds<=b[1];ds=nextDay(ds)){
+    let rows='';
+    ['morning','evening'].forEach(sh=>{
+      const es=DB.schedule.filter(e=>e.date===ds&&e.shift===sh);
+      const sale=getSale(ds,sh),rate=sale!=null?shiftRate(ds,sh,sale):null,past=ds<todayStr();
+      let block='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi':'🌙 Syif Petang')+
+      ' <span class="chip '+(es.length>=S.maxPerShift?'chip-ok':'chip-warn')+'">'+es.length+'/'+S.maxPerShift+' staff</span>'+
+      (es.length===0?' <span class="chip chip-warn">Tiada staff — perlu diisi!</span>':'')+
+      ' '+(sale!=null?'<span class="chip '+(rate>S.baseRate?'chip-ok':'chip-info')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div>';
+      es.forEach(e=>{
+        const st=DB.users.find(u=>u.id===e.staffId);
+        block+='<div class="brow"><div><b>'+esc(st?st.name:'?')+'</b> '+(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+'</div>'+
+        '<div class="brow-act">'+
+        '<button class="btn btn-sm '+(e.noShow?'btn-ok':'btn-danger')+'" onclick="toggleNoShow(\''+e.id+'\')">'+(e.noShow?'↩ Hadir':'✕ Tidak Hadir')+'</button>'+
+        '<button class="btn btn-sm ghost" onclick="mgrRemoveAssign(\''+e.id+'\')" title="Buang tugasan">🗑</button></div></div>';
       });
-      html+='<div class="card glass"><h3>'+fmtDateDS(ds)+' '+(isWeekend(ds)?'<span class="chip chip-info">Weekend</span>':'')+(ds<todayStr()?' <span class="chip chip-no">Lampau</span>':'')+'</h3>'+rows+'</div>';
+      if(es.length<S.maxPerShift)
+        block+='<div style="margin-top:8px"><button class="btn btn-sm '+(past?'btn-danger':'btn-primary')+'" onclick="openAssignModal(\''+ds+'\',\''+sh+'\')">'+(past?'🚨 Assign Kecemasan (Lampau)':'✚ Assign Staff')+'</button></div>';
+      block+='</div>';
+      rows+=block;anySlot=true;
     });
-    if(!es.length)html+='<div class="card glass"><p style="opacity:.75">Tiada rekod jadual bulan ini.</p></div>';
-    html+='<p class="hint">Tanda "Tidak Hadir" mengikut kehadiran sebenar — jam &amp; bonus kehadiran staff tersebut akan terjejas dalam enjin gaji (rekod audit disimpan).</p>';
+    if(rows)html+='<div class="card glass"><h3>'+fmtDateDS(ds)+' '+(isWeekend(ds)?'<span class="chip chip-info">Weekend</span>':'')+(ds<todayStr()?' <span class="chip chip-no">Lampau</span>':'')+(ds===todayStr()?' <span class="chip chip-wait">Hari Ini</span>':'')+'</h3>'+rows+'</div>';
   }
+  if(!anySlot)html+='<div class="card glass"><p style="opacity:.75">Tiada slot dalam tempoh ini.</p></div>';
+  html+='<p class="hint">💡 <b>Assign</b> = tugaskan staff terus ke slot (termasuk yang tak dipilih sesiapa &amp; tarikh lampau untuk kes kecemasan). <b>Buang (🗑)</b> = batalkan tugasan. Semua perubahan direkod dalam Log Audit &amp; memberi kesan kepada pengiraan gaji.</p>';
   $('#viewRoot').innerHTML=html;
 }
 function renderSales(){
@@ -1039,7 +1122,7 @@ function renderSales(){
   '<label class="field"><span>Syif</span><select id="saleShift"><option value="morning"'+(edit&&edit.shift==='morning'?' selected':'')+'>☀ Syif Pagi (10:00–16:00)</option><option value="evening"'+(edit&&edit.shift==='evening'?' selected':'')+'>🌙 Syif Petang (16:00–22:00)</option></select></label>'+
   '<label class="field"><span>Jumlah jualan (RM)</span><input type="number" id="saleAmt" min="0" step="0.01" placeholder="cth: 350.00" value="'+(edit&&getSale(edit.date,edit.shift)!=null?getSale(edit.date,edit.shift):'')+'"></label></div>'+
   '<button class="btn btn-primary btn-big" onclick="setSaleSubmit()">💾 Simpan Jualan</button>'+
-  '<p class="hint">Kadar RM'+S.highRate+'/jam diberi jika jualan syif melebihi '+rm(S.weekdayThreshold)+' (weekday) / '+rm(S.weekendThreshold)+' (weekend) — dinilai setiap syif. Julat amaun (0–99,999) turut dikuatkuasakan oleh database.</p></div>'+
+  '<p class="hint">Kadar RM'+S.highRate+'/jam diberi jika jualan syif melebihi '+rm(S.weekdayThreshold)+' (weekday) / '+rm(S.weekendThreshold)+' (weekend) — dinilai setiap syif.</p></div>'+
   '<div class="statrow"><div class="stat"><small>Jumlah jualan bulan semasa</small><b>'+rm(mTotal)+'</b></div></div>'+
   '<div class="card glass"><h3>Rekod Terkini</h3>'+
   (sales.length?sales.map(s=>{const rate=shiftRate(s.date,s.shift,s.amount);
@@ -1077,15 +1160,16 @@ function renderMPayroll(){
     bi.map(u=>{const p1=slipFor(u.id,mk+'-01'),p2=slipFor(u.id,mk+'-15');
     return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div><div class="chips">'+(p1?'<span class="chip chip-ok">K1: RM '+p1.total.toFixed(2)+'</span>':'<span class="chip chip-wait">K1 belum</span>')+(p2?'<span class="chip chip-ok">K2: RM '+p2.total.toFixed(2)+'</span>':'<span class="chip chip-wait">K2 belum</span>')+'</div></div>'}).join('')+
     '<div class="chips" style="margin:10px 0"><button class="btn btn-ok" style="flex:1;min-width:200px" onclick="genPayslips(\'B1\')">Jana Kitaran 1 (1–14)</button><button class="btn btn-ok" style="flex:1;min-width:200px" onclick="genPayslips(\'B2\')">Jana Kitaran 2 (15–'+dim+')</button></div>'+
-    '<p class="hint">Bonus prestasi &amp; kehadiran (dinilai bulanan) dimasukkan pada <b>Kitaran 2</b> sahaja bagi staff 2-mingguan — supaya tiada bonus dibayar dua kali atau pra-matang (PRD 5.6a / 6.4). Elaun typhoid diberi setiap kitaran (maks '+S.typhoidMax+' kali).</p></div>';
+    '<p class="hint">Bonus prestasi &amp; kehadiran (dinilai bulanan) dimasukkan pada <b>Kitaran 2</b> sahaja bagi staff 2-mingguan (PRD 5.6a / 6.4). Elaun typhoid diberi setiap kitaran (maks '+S.typhoidMax+' kali).</p></div>';
   if(!monthly.length&&!bi.length)html+='<div class="card glass"><p style="opacity:.7">Tiada staff aktif.</p></div>';
   html+='<div class="card glass"><h3>Slip Dijana — '+monthLabel(mk)+' ('+slips.length+')</h3>'+
   (slips.length?slips.map(p=>'<div class="brow"><div><b>'+esc(p.staffName)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+dShort(p.start)+' – '+dShort(p.end)+'</span><span class="chip">'+(p.cycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip chip-ok">'+p.hours+' jam</span></div></div><div class="brow-act"><b class="amt">'+rm(p.total)+'</b><button class="btn btn-sm" onclick="viewSlip(\''+p.id+'\')" title="Lihat">👁</button><button class="btn btn-sm" onclick="downloadSlip(\''+p.id+'\')" title="PDF">⬇</button><button class="btn btn-sm btn-danger" onclick="deleteSlip(\''+p.id+'\')" title="Padam">🗑</button></div></div>').join(''):'<p style="opacity:.7">Belum ada slip untuk bulan ini.</p>')+'</div>'+
   '<div class="card glass"><h3>📖 Ringkasan Peraturan Gaji (PRD Seksyen 6)</h3><ul class="seclist">'+
-  '<li>Kadar asas '+rm(S.baseRate)+'/jam; <b>'+rm(S.highRate)+'/jam</b> untuk syif dengan jualan &gt; '+rm(S.weekdayThreshold)+' (weekday) / &gt; '+rm(S.weekendThreshold)+' (weekend) — dinilai <b>setiap syif</b>, bukan sebulan.</li>'+
+  '<li>Kadar asas '+rm(S.baseRate)+'/jam; <b>'+rm(S.highRate)+'/jam</b> untuk syif dengan jualan &gt; '+rm(S.weekdayThreshold)+' (weekday) / &gt; '+rm(S.weekendThreshold)+' (weekend) — dinilai <b>setiap syif</b>.</li>'+
   '<li>Bonus prestasi '+rm(S.perfBonus)+': jumlah jualan <b>semua syif staff tersebut</b> sebulan &gt; '+rm(S.monthlySalesThreshold)+'.</li>'+
   '<li>Bonus kehadiran '+rm(S.attBonus)+': hadir penuh, tiada tidak-hadir &amp; <b>tiada rekod pertukaran syif</b> sebulan.</li>'+
-  '<li>Elaun typhoid '+rm(S.typhoidAllowance)+'/kitaran, maksimum '+S.typhoidMax+' kali — kiraan automatik per staff.</li></ul></div>';
+  '<li>Elaun typhoid '+rm(S.typhoidAllowance)+'/kitaran, maksimum '+S.typhoidMax+' kali — kiraan automatik per staff.</li>'+
+  '<li>Tugasan kecemasan manager pada tarikh lampau <b>dikira retrospektif</b> — jana semula slip jika slip lama sudah wujud.</li></ul></div>';
   $('#viewRoot').innerHTML=html;
 }
 function renderMStaff(){
@@ -1102,7 +1186,7 @@ function renderMStaff(){
     (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
     (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
   }).join('');
-  html+='<p class="hint">💡 "Tambah Akaun" &amp; "Set Semula PIN" dilaksanakan melalui RPC server-side (admin_create_user / admin_reset_pin) yang menyemak peranan manager/admin di server — kata laluan sentiasa dihash (bcrypt). Kitaran gaji boleh ditukar bila-bila masa mengikut staff individu (PRD 5.6a).</p>';
+  html+='<p class="hint">💡 "Tambah Akaun" = 2 langkah: cipta akaun di Supabase Dashboard (Authentication → Users) dengan email <b>username@soobeh.app</b> &amp; password <b>PIN-soobeh</b>, kemudian tekan butang Tambah Akaun dalam sistem ini.</p>';
   $('#viewRoot').innerHTML=html;
 }
 function renderMSettings(){
@@ -1119,45 +1203,61 @@ function renderMSettings(){
   f('stMax','Maksimum staff setiap syif',S.maxPerShift,'1')+f('stHrs','Jam setiap syif',S.shiftHours,'0.5')+'</div>'+
   '<label class="chk"><input type="checkbox" id="stStaffSales"'+(S.allowStaffSales?' checked':'')+'> Benarkan staff input jualan sendiri (PRD 5.5)</label>'+
   '<button class="btn btn-primary btn-big" onclick="saveSettings()">💾 Simpan Tetapan</button>'+
-  '<p class="hint">Semua kadar &amp; syarat bonus boleh dikonfigur tanpa ubah kod (NFR: Kebolehpercayaan). Nilai disimpan dalam database — berkuat kuasa serta-merta untuk slip yang dijana selepas ini.</p></div>'+
+  '<p class="hint">Semua kadar &amp; syarat bonus boleh dikonfigur tanpa ubah kod. Berkuat kuasa serta-merta untuk slip yang dijana selepas ini.</p></div>'+
   '<div class="card glass"><h3>🔐 Ringkasan Keselamatan Aktif (Supabase)</h3><ul class="seclist">'+
-  '<li>PIN = kata laluan <b>Supabase Auth</b>, disimpan sebagai <b>hash bcrypt di server</b> — bukan teks biasa, tidak pernah sampai ke database aplikasi sebagai teks.</li>'+
-  '<li><b>Row-Level Security (RLS)</b> di database: slip gaji hanya boleh dibaca oleh pemiliknya; hanya manager/admin boleh mengubah jadual, jualan &amp; gaji — dikuatkuasakan di server walaupun API dipanggil terus.</li>'+
-  '<li>Tindakan sensitif (keluarkan jadual, lulus/tolak pertukaran, cipta akaun, reset PIN) berjalan dalam <b>RPC security-definer</b> yang menyemak peranan caller di server.</li>'+
-  '<li><b>Trigger database</b> menguatkuasakan peraturan tempahan: kapasiti maksimum/syif, tiada duplikasi, tiada tarikh lampau — walaupun ada yang cuba bypass UI.</li>'+
-  '<li>Rate-limit Supabase Auth (anti brute-force) + kunci 60 saat selepas 5 percubaan gagal di klien + auto-log-keluar 30 minit tidak aktif.</li>'+
-  '<li><b>Log audit</b> ditulis oleh trigger (username diambil dari token) dan tidak boleh diubah/dipadam melalui API.</li>'+
-  '<li><b>anon key</b> memang selamat didedahkan dalam frontend — semua akses dikawal oleh RLS. <b>service_role key JANGAN</b> sesekali dimasukkan ke dalam kod frontend.</li></ul></div>'+
-  '<div class="card glass"><h3>ℹ️ Nota</h3><p class="hint">Untuk reset penuh data demo: buka Supabase → SQL Editor → jalankan semula <b>01_schema.sql</b> kemudian <b>02_seed.sql</b>. Semua akaun demo akan dicipta semula.</p></div>';
+  '<li>PIN = kata laluan <b>Supabase Auth</b>, hash <b>bcrypt di server</b> — bukan teks biasa.</li>'+
+  '<li><b>RLS</b>: slip gaji hanya pemiliknya; hanya manager/admin boleh ubah jadual/jualan/gaji.</li>'+
+  '<li>Tindakan sensitif (keluarkan jadual tempoh, lulus tukar syif, <b>assign/buang tugasan</b>, cipta akaun, reset PIN) berjalan dalam <b>RPC security-definer</b> dengan semakan peranan di server.</li>'+
+  '<li><b>Trigger database</b> menguatkuasakan peraturan tempahan: tetingkap 2 tempoh, kapasiti maks/syif (jadual + tempahan), tiada duplikasi, tiada tarikh lampau.</li>'+
+  '<li>Rate-limit Supabase Auth + kunci 60 saat selepas 5 gagal + auto-log-keluar 30 minit tidak aktif.</li>'+
+  '<li><b>Log audit</b> ditulis oleh trigger — tidak boleh diubah/dipadam melalui API.</li>'+
+  '<li><b>anon key</b> selamat didedahkan (dilindungi RLS). <b>service_role JANGAN</b> letak dalam frontend.</li></ul></div>'+
+  '<div class="card glass"><h3>ℹ️ Nota</h3><p class="hint">Reset data demo: SQL Editor → jalankan mengikut tertib <b>01_schema.sql → 03_seed.sql → 04_fix_admin.sql → 05_upgrade_2week.sql</b>.</p></div>';
 }
 function renderMAudit(){
   const rows=DB.audit.slice(0,150);
   $('#viewRoot').innerHTML='<div class="pagehead"><h2>📜 Log Audit Sistem</h2></div>'+
   '<div class="card glass"><div class="tblwrap"><table class="tbl"><tr><th>Masa</th><th>Pengguna</th><th>Tindakan</th><th>Butiran</th></tr>'+
   rows.map(a=>'<tr><td>'+new Date(a.t).toLocaleString('ms-MY')+'</td><td>'+esc(a.by)+'</td><td>'+esc(a.action)+'</td><td>'+esc(a.detail||'')+'</td></tr>').join('')+'</table></div></div>'+
-  '<p class="hint">Setiap tindakan kritikal direkodkan secara automatik oleh trigger database: login/logout, kelulusan tempahan &amp; pertukaran, penerbitan jadual, input jualan, penjanaan/padaman slip, PIN &amp; tetapan. Baris log tidak boleh diubah melalui API.</p>';
+  '<p class="hint">Termasuk tindakan baharu: <b>mgr_assign</b> / <b>mgr_unassign</b> (tugasan manager, ditanda jika tarikh lampau) &amp; <b>schedule_publish</b> ikut tempoh.</p>';
 }
 
-/* ---------- 18. BOOT ---------- */
-async function boot(){
-  if(!window.supabase){ROUTE.view='setup';render();return}
-  if(!CONFIG||!CONFIG.SUPABASE_URL||!CONFIG.SUPABASE_ANON_KEY||/GANTI|XXXX/i.test(CONFIG.SUPABASE_URL+CONFIG.SUPABASE_ANON_KEY)){
-    ROUTE.view='setup';render();return}
-  SB=supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
-  SB.auth.onAuthStateChange(ev=>{
-    if(ev==='SIGNED_OUT'&&ME){ME=null;DB=emptyDB();ROUTE={view:'landing',portal:'staff',tab:'cal',mtab:'dash',mk:null,bmk:null,smk:null,pmk:null,saleEdit:null};render()}
-  });
-  const {data:{session}}=await SB.auth.getSession();
-  if(session&&session.user){
-    const {data:prof}=await SB.from('profiles').select('*').eq('id',session.user.id).single();
-    if(prof&&prof.active!==false){
-      ME=mapProfile(prof);
-      ROUTE={view:prof.role==='staff'?'staff':'manager',portal:'staff',tab:'cal',mtab:'dash',mk:monthKey(todayStr()),bmk:null,smk:null,pmk:null,saleEdit:null};
-      await loadAll();
-    }else{await SB.auth.signOut()}
+/* ---------- 18. BOOT (dengan paparan ralat) ---------- */
+window.addEventListener('error',e=>showFatal(e.message));
+window.addEventListener('unhandledrejection',e=>showFatal((e.reason&&e.reason.message)||String(e.reason)));
+function showFatal(msg){
+  const r=document.getElementById('app');
+  if(r&&!r.innerHTML.trim()){
+    r.innerHTML='<div class="landing"><div class="hero glass"><div class="logo big">⚠️</div><h1>Ralat Memuatkan Sistem</h1>'+
+    '<p style="opacity:.9">'+esc(msg)+'</p>'+
+    '<p class="hint">Semak <b>config.js</b>, pastikan sudah di-commit ke GitHub &amp; Vercel telah re-deploy. Buka <b>/check.html</b> untuk diagnostik penuh.</p></div></div>';
   }
-  render();startIdleWatch();
-  window.addEventListener('afterprint',()=>{$('#printArea').innerHTML=''});
+}
+async function boot(){
+  try{
+    if(!window.supabase){ROUTE.view='setup';render();return}
+    if(!CONFIG||!CONFIG.SUPABASE_URL||!CONFIG.SUPABASE_ANON_KEY||/GANTI|XXXX/i.test(String(CONFIG.SUPABASE_URL)+String(CONFIG.SUPABASE_ANON_KEY))){ROUTE.view='setup';render();return}
+    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(String(CONFIG.SUPABASE_URL).trim())){showFatal('SUPABASE_URL tidak sah: "'+esc(CONFIG.SUPABASE_URL)+'"');return}
+    if(!/^(eyJ|sb_publishable_|sb_anon_)/.test(String(CONFIG.SUPABASE_ANON_KEY).trim())){showFatal('SUPABASE_ANON_KEY tidak sah — mesti bermula "eyJ" atau "sb_publishable_".');return}
+    SB=supabase.createClient(CONFIG.SUPABASE_URL.trim(),CONFIG.SUPABASE_ANON_KEY.trim());
+    SB.auth.onAuthStateChange(ev=>{
+      if(ev==='SIGNED_OUT'&&ME){ME=null;DB=emptyDB();ROUTE=freshROUTE();render()}
+    });
+    const {data}=await SB.auth.getSession();
+    const session=data?data.session:null;
+    if(session&&session.user){
+      const {data:prof}=await SB.from('profiles').select('*').eq('id',session.user.id).single();
+      if(prof&&prof.active!==false){
+        ME=mapProfile(prof);
+        ROUTE=Object.assign(freshROUTE(),{view:prof.role==='staff'?'staff':'manager',pk:curPeriod()});
+        await loadAll();
+      }else{await SB.auth.signOut()}
+    }
+    render();startIdleWatch();
+    window.addEventListener('afterprint',()=>{$('#printArea').innerHTML=''});
+  }catch(err){
+    showFatal((err&&err.message)||String(err));
+  }
 }
 boot();
 </script>
