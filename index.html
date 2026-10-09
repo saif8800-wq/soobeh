@@ -649,6 +649,48 @@ async function setSaleSubmit(){
 function editSale(date,shift){ROUTE.saleEdit={date:date,shift:shift};render();}
 
 /* ---------- 10. PENGURUSAN STAF ---------- */
+ /* ---------- 9b. ELAUN TYPHOID: KAWALAN MANAGER (ON/OFF + kiraan per staff) ---------- */
+function openTyphoidModal(id){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const t=DB.users.find(x=>x.id===id);if(!t||t.role!=='staff')return;
+  const S=DB.settings,max=S.typhoidMax;
+  let body='';
+  if(S.typhoidEnabled===false)body+='<div class="notice warn">⚠ Bayaran elaun typhoid buat masa ini <b>DIMATIKAN</b> — kiraan di bawah tetap disimpan, tetapi tiada RM ditambah pada slip sehingga diaktifkan semula (suis di atas).</div>';
+  body+='<div class="notice info">Elaun <b>'+rm(S.typhoidAllowance)+'</b> setiap kitaran gaji, sehingga maksimum <b>'+max+' kali</b> (jumlah keseluruhan RM'+(S.typhoidAllowance*max).toFixed(2)+' setiap staff). Laraskan berapa kali telah dibayar — slip yang dijana selepas ini akan ikut nilai baharu.</div>'+
+  '<div class="detailrow"><span>Staff</span><b>'+esc(t.name)+'</b></div>'+
+  '<div class="detailrow"><span>Telah dibayar (semasa)</span><b>'+t.typhoidCount+'/'+max+'</b></div>'+
+  '<h3 style="margin-top:12px">Set kepada:</h3><div class="chips" style="margin:10px 0">';
+  for(let i=0;i<=max;i++)body+='<button class="btn btn-sm '+(t.typhoidCount===i?'btn-primary':'')+'" onclick="setTyphoidCount(\''+t.id+'\','+i+')">'+i+'/'+max+(i===0?' (mula baharu)':i===max?' (selesai)':'')+'</button>';
+  body+='</div>'+
+  '<label class="field"><span>Atau masuk nilai sendiri (0–'+max+')</span><input type="number" id="typhVal" min="0" max="'+max+'" value="'+t.typhoidCount+'"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="setTyphoidCountManual(\''+t.id+'\')">💾 Simpan Kiraan</button>'+
+  '<p class="hint">Kesannya serta-merta pada anggaran gaji staff & slip yang dijana selepas ini. Slip lama tidak berubah — padam & jana semula jika perlu.</p>';
+  openModal('💉 Elaun Typhoid — '+esc(t.name),body);
+}
+async function setTyphoidCount(staffId,count){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const {error}=await SB.rpc('set_typhoid_count',{p_staff:staffId,p_count:count});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('typhoid_set',(usernameOf(staffId)||'?')+' → '+count+'/'+DB.settings.typhoidMax);
+  closeModal();await sync();render();toast('Kiraan elaun typhoid dikemaskini ✔','ok');
+}
+async function setTyphoidCountManual(staffId){
+  const v=parseInt(($('#typhVal')||{}).value,10);
+  if(isNaN(v)||v<0||v>DB.settings.typhoidMax)return toast('Nilai mesti antara 0–'+DB.settings.typhoidMax,'err');
+  await setTyphoidCount(staffId,v);
+}
+async function toggleTyphoidEnabled(){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const nv=DB.settings.typhoidEnabled===false;
+  if(nv&&!confirm('AKTIFKAN bayaran elaun typhoid?\n\nSlip baharu akan ditambah RM'+DB.settings.typhoidAllowance+' setiap kitaran untuk staff yang masih ada baki (bawah maks '+DB.settings.typhoidMax+' kali).'))return;
+  if(!nv&&!confirm('MATIKAN bayaran elaun typhoid?\n\nSlip yang dijana selepas ini TIDAK akan termasuk elaun typhoid. Slip sedia ada kekal seperti asal.'))return;
+  const {error}=await SB.rpc('set_typhoid_enabled',{p_enabled:nv});
+  if(error)return toast(friendly(error),'err');
+  await logAudit(nv?'typhoid_enable':'typhoid_disable','Elaun typhoid '+(nv?'AKTIF':'DIMATIKAN')+' oleh '+ME.username);
+  await sync();render();
+  toast(nv?'▶ Bayaran elaun typhoid AKTIF — mula ditambah pada slip baharu 💉':'⏸ Bayaran elaun typhoid DIMATIKAN',nv?'ok':'info');
+}
+
 function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   openModal('Tambah Akaun Baharu',
   '<div class="notice ok">✨ Akaun dicipta <b>serta-merta dari sini</b> — tiada perlu buka Supabase Dashboard lagi.</div>'+
@@ -1168,7 +1210,7 @@ function renderMStaff(){
     return '<div class="card glass"><div class="brow"><div><b>'+esc(x.name)+'</b> '+(inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
     '<div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin')+'</span><span class="chip">'+esc(x.username)+'</span>'+
     (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'" title="Kitaran gaji">'+(x.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip">💉 Typhoid '+x.typhoidCount+'/'+DB.settings.typhoidMax+'</span>':'')+'</div></div>'+
-    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button>':'')+
+    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button><button class="btn btn-sm" onclick="openTyphoidModal(\''+x.id+'\')" title="Laraskan elaun typhoid">💉 Typhoid</button>':'')+
     '<button class="btn btn-sm" onclick="openResetPin(\''+x.id+'\')">🔑 Set Semula PIN</button>'+
     (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
     (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
