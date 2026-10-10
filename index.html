@@ -1132,7 +1132,7 @@ function renderStaffJadual(){
       html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span><span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
       (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
       (past&&sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':past?'<span class="chip chip-wait">Jualan belum dimasukkan</span>':'')+'</div></div>'+
-      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';;
+      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';
     });
     html+='</div>';
   });
