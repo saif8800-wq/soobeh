@@ -1058,7 +1058,7 @@ function slotPill(ds,shift,pub,locked){
 }
 function renderStaffCalendar(){
   const u=currentUser();
-  if(!ROUTE.pk)ROUTE.pk=curPeriod();
+  if(!ROUTE.pk){const c=curPeriod();ROUTE.pk=periodPublished(c)?nextPeriod(c):c;}
   const pk=ROUTE.pk,pub=periodPublished(pk),b=periodBounds(pk),winEnd=bookingWindowEnd();
   let cells='';DOW.forEach(d=>cells+='<div class="cal-dow">'+d+'</div>');
   const off=(new Date(b[0]+'T00:00:00').getDay()+6)%7;
@@ -1071,10 +1071,12 @@ function renderStaffCalendar(){
   const est=estimateFor(u.id);
   $('#viewRoot').innerHTML=
   '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
-  shiftInfoCardHTML()+upcomingShiftsHTML()+
+
   (pub?'<div class="notice ok">🔒 Jadual rasmi tempoh ini telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
       :'<div class="notice info">🗓️ Kitaran <b>2 minggu</b>: Tempoh 1 (1–15) &amp; Tempoh 2 (16–akhir bulan). Anda boleh menempah untuk <b>tempoh semasa &amp; tempoh seterusnya</b> sahaja — sehingga <b>'+dShort(winEnd)+'</b>. Status: <span class="chip chip-wait">Menunggu</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> · had '+DB.settings.maxPerShift+' staff/syif.</div>')+
+  (pub?'':'<div class="notice warn">⚡ <b>TEMPOH INI TERBUKA untuk tempahan</b> — pilih syif anda sekarang supaya tidak terlepas! Boleh menempah hingga <b>'+dShort(winEnd)+'</b>.</div>')+
   '<div class="cal-grid glass">'+cells+'</div>'+
+  shiftInfoCardHTML()+upcomingShiftsHTML()+
   '<div class="card glass"><h3>Ringkasan Bulan Semasa</h3><div class="statrow">'+
   '<div class="stat"><small>Syif (bulan ini)</small><b>'+est.c.shifts.length+'</b></div>'+
   '<div class="stat"><small>Jam bekerja</small><b>'+est.c.totalHours+'</b></div>'+
@@ -1114,29 +1116,51 @@ function openSlot(ds,shift){
 }
 function renderStaffJadual(){
   const u=currentUser(),S=DB.settings;
-  const sched=DB.schedule.filter(e=>e.staffId===u.id).sort((a,b)=>a.date.localeCompare(b.date));
-  const open=DB.bookings.filter(b=>b.staffId===u.id&&!periodPublished(periodOf(b.date))).sort((a,b)=>a.date.localeCompare(b.date));
-  let html='<div class="pagehead"><h2>🗓️ Jadual Saya</h2></div>';
-  if(open.length){
-    const groups={};open.forEach(b=>{(groups[periodOf(b.date)]=groups[periodOf(b.date)]||[]).push(b)});
-    Object.keys(groups).sort().forEach(pk=>{
-      html+='<div class="card glass"><h3>'+periodLabel(pk)+' · Tempahan</h3>'+groups[pk].map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip(b.status)+'</div>').join('')+'<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi untuk tempoh ini.</p></div>';
+  const mk=monthKey(todayStr()),mStart=mk+'-01',mEnd=mk+'-'+pad2(daysInMonth(mk));
+  const key=e=>e.date+'|'+e.shift;
+  /* Syif DISAHKAN sahaja: jadual rasmi + tugasan manager + tempahan diluluskan.
+     Tempahan DITOLAK / tidak dipilih TIDAK dipaparkan. Bulan lampau tidak dipaparkan. */
+  const items=DB.schedule.filter(e=>e.staffId===u.id&&e.date>=mStart);
+  const seen=new Set(items.map(key));
+  DB.bookings.forEach(b=>{if(b.staffId===u.id&&b.date>=mStart&&b.status==='approved'&&!seen.has(key(b)))items.push({date:b.date,shift:b.shift,hours:null,noShow:false})});
+  items.sort((a,b)=>a.date.localeCompare(b.date)||(a.shift<b.shift?-1:1));
+  const upcoming=items.filter(e=>e.date>=todayStr());
+  const past=items.filter(e=>e.date<todayStr()&&e.date<=mEnd);
+  const pending=DB.bookings.filter(b=>b.staffId===u.id&&b.date>=todayStr()&&b.status==='pending').sort((a,b)=>a.date.localeCompare(b.date));
+  let html='<div class="pagehead"><h2>🗓️ Jadual Saya</h2><span class="chip chip-info">fokus: akan datang</span></div>';
+  /* 1) PALING ATAS — syif akan datang yang telah disahkan manager */
+  html+='<div class="card glass"><h3>📅 Syif Akan Datang <small>(telah disahkan)</small></h3>';
+  if(upcoming.length){
+    upcoming.forEach(e=>{
+      const pub=periodPublished(periodOf(e.date));
+      const days=Math.round((new Date(e.date+'T00:00:00')-new Date(todayStr()+'T00:00:00'))/864e5);
+      const badge=days===0?'<span class="chip chip-warn">⚡ HARI INI</span>':days===1?'<span class="chip chip-wait">ESOK</span>':'';
+      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px">'+
+      '<span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span>'+
+      '<span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
+      (pub?'<span class="chip chip-ok">Jadual Rasmi</span>':'<span class="chip chip-ok">Disahkan</span>')+badge+'</div></div></div>';
     });
+  }else html+='<p style="opacity:.75">Tiada syif disahkan pada masa hadapan — tempah di tab Kalendar 📅</p>';
+  html+='</div>';
+  /* 2) Menunggu kelulusan manager (pending sahaja) */
+  if(pending.length){
+    html+='<div class="card glass"><h3>⏳ Menunggu Kelulusan Manager ('+pending.length+')</h3>'+
+    pending.map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip('pending')+'</div>').join('')+
+    '<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi. Tempahan yang tidak dipilih tidak akan dipaparkan di sini.</p></div>';
   }
-  const pkeys=[...new Set(sched.map(e=>periodOf(e.date)))].sort();
-  pkeys.forEach(pk=>{
-    const b=periodBounds(pk),pub=periodPublished(pk);
-    html+='<div class="card glass"><h3>'+periodLabel(pk)+' · '+(pub?'Jadual Rasmi':'Tugasan Manager')+' '+(pub?'':'<span class="chip chip-wait">tempoh belum diterbitkan</span>')+'</h3>';
-    sched.filter(e=>e.date>=b[0]&&e.date<=b[1]).forEach(e=>{
-      const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null,past=e.date<todayStr();
+  /* 3) Lampau bulan semasa — dilipat supaya senarai kekal pendek */
+  if(past.length){
+    html+='<details class="shiftdet card glass" style="padding:14px 18px"><summary>📜 Syif Lampau Bulan Ini ('+past.length+') — tekan untuk buka</summary>';
+    past.forEach(e=>{
+      const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null;
       html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span><span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
       (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
-      (past&&sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':past?'<span class="chip chip-wait">Jualan belum dimasukkan</span>':'')+'</div></div>'+
-      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';
+      (sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div></div>'+
+      (!e.noShow&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';
     });
-    html+='</div>';
-  });
-  if(!sched.length&&!open.length)html+='<div class="card glass"><p style="opacity:.75">Belum ada jadual. Mulakan dengan menempah syif di Kalendar 📅</p></div>';
+    html+='</details>';
+  }
+  if(!upcoming.length&&!pending.length&&!past.length)html+='<div class="card glass"><p style="opacity:.75">Belum ada jadual bulan ini. Mulakan dengan menempah syif di Kalendar 📅</p></div>';
   $('#viewRoot').innerHTML=html;
 }
 function renderStaffSwap(){
