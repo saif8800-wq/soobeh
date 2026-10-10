@@ -904,11 +904,11 @@ function openResetPin(id){
 async function submitResetPin(id){
   const pin=(($('#rpPin')||{}).value||'').trim();
   if(!/^\d{4,6}$/.test(pin))return toast('PIN mesti 4–6 digit','err');
-  let r=null;
-  try{r=await SB.functions.invoke('reset-soobeh-pin',{body:{p_user:id,p_pin:pin}})}catch(e){return toast('Gagal: '+((e&&e.message)||e),'err')}
-  if(r.error||(r.data&&r.data.error))return toast('Gagal: '+((r.data&&r.data.error)||(r.error&&r.error.message)||'ralat'),'err');
-  await logAudit('pin_reset',(usernameOf(id)||'?'));
-  closeModal();toast('PIN disetkan semula ✔','ok');
+  const t=DB.users.find(x=>x.id===id);if(!t)return;
+  const {error}=await SB.rpc('admin_reset_pin',{p_username:t.username,p_pin:pin});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('pin_reset',t.username);
+  closeModal();await sync();render();toast('PIN diset semula ✔','ok');
 }
 
 /* ---------- 11. TETAPAN (Admin) ---------- */
