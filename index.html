@@ -237,14 +237,14 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
-const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active});
+const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null});
 function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
 const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
-const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show});
+const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show,hours:r.hours!=null?+r.hours:null});
 const mapSwap=(r)=>({id:r.id,entryId:r.entry_id,exchangeEntryId:r.exchange_entry_id,fromStaffId:r.from_staff,toStaffId:r.to_staff,reason:r.reason||'',status:r.status,t:Date.parse(r.created_at),tPeer:r.t_peer?Date.parse(r.t_peer):null,tMgr:r.t_mgr?Date.parse(r.t_mgr):null,by:usernameOf(r.decided_by)});
 const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.entered_by),t:Date.parse(r.updated_at)});
 const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
@@ -276,6 +276,8 @@ async function loadAll(){
   DB.payslips=(q[6].data||[]).map(mapPayslip);
   DB.notifications=(q[7].data||[]).map(mapNotif);
   DB.settings=mapSettings((q[8].data||[])[0]);
+  const dd=await SB.from('deductions').select('*').order('created_at',{ascending:false});
+  DB.deductions=(dd.data||[]).map(r=>({id:r.id,staffId:r.staff_id,periodStart:r.period_start,amount:+r.amount,reason:r.reason||'',t:Date.parse(r.created_at)}));
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
 }
 async function sync(){await loadAll()}
@@ -343,10 +345,11 @@ function scheduledEntries(staffId,mk){ /* gabung: jadual (termasuk ASSIGN manage
 }
 function computeCycle(staffId,pStart,pEnd){
   const S=DB.settings,mk=monthKey(pStart);
+  const stf=DB.users.find(u=>u.id===staffId)||{};
   const entries=scheduledEntries(staffId,mk).filter(e=>!e.noShow&&e.date>=pStart&&e.date<=pEnd);
   const shifts=[];let totalHours=0,basePay=0,highHours=0,extraPay=0,salesSum=0;
   entries.forEach(e=>{
-    const sale=getSale(e.date,e.shift),rate=shiftRate(e.date,e.shift,sale),hours=S.shiftHours,amount=hours*rate;
+    const sale=getSale(e.date,e.shift),rate=shiftRate(e.date,e.shift,sale),hours=(e.hours!=null?e.hours:(stf.defaultHours!=null?stf.defaultHours:S.shiftHours)),amount=hours*rate;
     totalHours+=hours;basePay+=hours*S.baseRate;
     if(rate>S.baseRate){highHours+=hours;extraPay+=hours*(S.highRate-S.baseRate)}
     if(sale!=null)salesSum+=sale;
@@ -373,7 +376,8 @@ function estimateFor(staffId){
   const perf=perfEligible(staffId,mk),att=attEligible(staffId,mk);
   const st=DB.users.find(u=>u.id===staffId)||{};
   const typh=(S.typhoidEnabled!==false&&st.typhoidCount<S.typhoidMax)?S.typhoidAllowance:0;
-  return {c:c,perf:perf,att:att,typh:typh,total:c.basePay+c.extraPay+(perf.ok?S.perfBonus:0)+(att.ok?S.attBonus:0)+typh};
+  const deduct=DB.deductions.filter(d=>d.staffId===staffId&&monthKey(d.periodStart)===mk).reduce((a,d)=>a+d.amount,0);
+  return {c:c,perf:perf,att:att,typh:typh,deduct:deduct,total:c.basePay+c.extraPay+(perf.ok?S.perfBonus:0)+(att.ok?S.attBonus:0)+typh-deduct};
 }
 
 /* ---------- 6. SLIP GAJI ---------- */
@@ -391,11 +395,13 @@ async function generatePayslip(staffId,pStart,pEnd){
   if(typh)staff.typhoidCount++;
   const perfAmt=(includeBonus&&perf.ok)?S.perfBonus:0;
   const attAmt=(includeBonus&&att.ok)?S.attBonus:0;
-  const total=c.basePay+c.extraPay+perfAmt+attAmt+typh;
+  const deducts=DB.deductions.filter(d=>d.staffId===staffId&&d.periodStart===pStart);
+  const deductAmt=deducts.reduce((a,d)=>a+d.amount,0);
+  const total=c.basePay+c.extraPay+perfAmt+attAmt+typh-deductAmt;
   const slip={staffName:staff.name,username:staff.username,cycle:staff.payCycle,start:pStart,end:pEnd,
     shiftCount:c.shifts.length,hours:c.totalHours,basePay:c.basePay,highHours:c.highHours,extraPay:c.extraPay,
     salesSum:c.salesSum,perfSum:perf.sum,perfAmt:perfAmt,attAmt:attAmt,attWhy:att.ok?'':att.why,includeBonus:includeBonus,
-    typh:typh,typhNo:typh?typhCountBefore+1:null,typhCountBefore:typhCountBefore,typhOff:S.typhoidEnabled===false,total:total,shifts:c.shifts,
+    typh:typh,typhNo:typh?typhCountBefore+1:null,typhCountBefore:typhCountBefore,typhOff:S.typhoidEnabled===false,deductionAmt:deductAmt,deductions:deducts.map(d=>({amount:d.amount,reason:d.reason})),total:total,shifts:c.shifts,
     t:Date.now(),by:ME.username};
   const {error}=await SB.from('payslips').insert({staff_id:staffId,start:pStart,end:pEnd,cycle:staff.payCycle,payload:slip,created_by:ME.id});
   if(error){if(typh)staff.typhoidCount--;if(/duplicate/i.test(error.message||''))return {ok:false,msg:staff.name+' — slip tempoh ini sudah dijana'};return {ok:false,msg:friendly(error)}}
@@ -440,7 +446,8 @@ function slipBodyHTML(p){
   (p.extraPay>0?'<tr><td>Tambahan Kadar Tinggi — '+p.highHours+' jam × '+rm2(S.highRate-S.baseRate)+'/jam</td><td style="text-align:right">'+rm2(p.extraPay)+'</td></tr>':'')+
   '<tr><td>Bonus Prestasi Jualan <small>'+esc(perfNote)+'</small></td><td style="text-align:right">'+(p.perfAmt?rm2(p.perfAmt):'—')+'</td></tr>'+
   '<tr><td>Bonus Kehadiran & Disiplin <small>'+esc(attNote)+'</small></td><td style="text-align:right">'+(p.attAmt?rm2(p.attAmt):'—')+'</td></tr>'+
-  '<tr><td>Elaun Suntikan Typhoid</td><td style="text-align:right">'+typhTxt+'</td></tr></table>'+
+  '<tr><td>Elaun Suntikan Typhoid</td><td style="text-align:right">'+typhTxt+'</td></tr>'+
+  (p.deductions&&p.deductions.length?p.deductions.map(d=>'<tr><td>Potongan <small>'+esc(d.reason||'—')+'</small></td><td style="text-align:right;color:#fecaca">−'+rm2(d.amount)+'</td></tr>').join(''):'')+'</table>'+
   '<div class="ps-totalbox"><span>JUMLAH BAYARAN</span><span>'+rm(p.total)+'</span></div>';
   if(p.shifts&&p.shifts.length){
     h+='<details class="shiftdet"><summary>Lihat pecahan '+p.shifts.length+' syif</summary><div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Jam</th><th>Jualan</th><th>Kadar</th><th style="text-align:right">Jumlah</th></tr>'+
@@ -462,7 +469,8 @@ function payslipHTML(p){
   (p.extraPay>0?line('Tambahan Kadar Tinggi — '+p.highHours+' jam × RM '+(S.highRate-S.baseRate).toFixed(2)+'/jam',p.extraPay.toFixed(2)):'')+
   line('Bonus Prestasi Jualan'+(p.perfAmt?'':' — tidak layak (jualan sebulan RM '+p.perfSum.toFixed(2)+')'),(p.perfAmt||0).toFixed(2))+
   line('Bonus Kehadiran & Disiplin'+(p.attAmt?'':' — tidak layak'),(p.attAmt||0).toFixed(2))+
-  line('Elaun Suntikan Typhoid'+(p.typh?' (Bayaran '+p.typhNo+'/'+S.typhoidMax+')':(p.typhOff?' (dimatikan)':' ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)')),(p.typh||0).toFixed(2))+'</table>'+
+  line('Elaun Suntikan Typhoid'+(p.typh?' (Bayaran '+p.typhNo+'/'+S.typhoidMax+')':(p.typhOff?' (dimatikan)':' ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)')),(p.typh||0).toFixed(2))+
+  (p.deductions&&p.deductions.length?p.deductions.map(d=>line('Potongan — '+esc(d.reason||'tiada sebab'),'−'+d.amount.toFixed(2))).join(''):'')+'</table>'+
   (rows?'<table><tr><th>Tarikh</th><th>Syif</th><th>Jam</th><th>Jualan Syif</th><th>Kadar/Jam</th><th style="text-align:right">Jumlah</th></tr>'+rows+'</table>':'')+
   '<div class="ps-total"><span>JUMLAH BAYARAN</span><span>RM '+p.total.toFixed(2)+'</span></div>'+
   '<p class="ps-note">Slip ini dijana secara automatik oleh Sistem Soobeh mengikut peraturan gaji semasa (dinilai setiap syif). Ia adalah rekod komputer dan bukan bukti transaksi bank.</p>'+
@@ -575,6 +583,133 @@ async function mgrRemoveAssign(eid){
   if(error)return toast(friendly(error),'err');
   await sync();render();toast('Tugasan dibuang','ok');
 }
+/* ---------- 7c. JAM LARAS · POTONGAN · BUKA SEMULA · MAKA SYIF ---------- */
+function hrsOf(e){const S=DB.settings;const st=DB.users.find(u=>u.id===((e&&e.staffId)||ME.id))||{};return (e&&e.hours!=null)?e.hours:(st.defaultHours!=null?st.defaultHours:S.shiftHours)}
+function shiftInfoCardHTML(){
+  const S=DB.settings;
+  return '<div class="card glass"><h3>⏰ Masa Syif (Tetap)</h3>'+
+  '<div class="detailrow"><span>☀ Syif Pagi</span><b>10:00 pagi – 4:00 petang</b></div>'+
+  '<div class="detailrow"><span>🌙 Syif Petang</span><b>4:00 petang – 10:00 malam</b></div>'+
+  '<div class="detailrow"><span>Jam default</span><b>'+S.shiftHours+' jam/syif — boleh dijaraskan oleh manager (cth: latihan 4 jam)</b></div></div>';
+}
+function upcomingShiftsHTML(){
+  if(!ME)return '';
+  const S=DB.settings;
+  let items=DB.schedule.filter(e=>e.staffId===ME.id&&e.date>=todayStr()).map(e=>({date:e.date,shift:e.shift,hours:e.hours}));
+  const seen=new Set(items.map(e=>e.date+'|'+e.shift));
+  DB.bookings.forEach(b=>{if(b.staffId===ME.id&&b.date>=todayStr()&&b.status==='approved'&&!seen.has(b.date+'|'+b.shift))items.push({date:b.date,shift:b.shift,hours:null})});
+  items.sort((a,b)=>a.date.localeCompare(b.date)||(a.shift<b.shift?-1:1));
+  items=items.slice(0,2);
+  if(!items.length)return '';
+  return '<div class="card glass"><h3>🔔 2 Syif Akan Datang Anda</h3>'+items.map(e=>{
+    const days=Math.round((new Date(e.date+'T00:00:00')-new Date(todayStr()+'T00:00:00'))/864e5);
+    const badge=days===0?'<span class="chip chip-warn">⚡ HARI INI</span>':days===1?'<span class="chip chip-wait">ESOK</span>':'<span class="chip chip-info">dalam '+days+' hari</span>';
+    const h=hrsOf(e);
+    return '<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px">'+
+    '<span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span>'+
+    '<span class="chip chip-ok">⏱ '+h+' jam</span>'+badge+'</div></div>'+
+    '<b class="amt">≈'+rm2(h*S.baseRate)+'</b></div>';
+  }).join('')+'<p class="hint">Anggaran ikut kadar asas — kadar sebenar ikut jualan syif (RM'+S.highRate+'/jam jika melebihi sasaran).</p></div>';
+}
+function openHoursModal(eid){
+  const me=reqMgr();if(!me)return;
+  const e=DB.schedule.find(x=>x.id===eid);if(!e)return;
+  const st=DB.users.find(u=>u.id===e.staffId)||{};
+  const S=DB.settings;
+  const cur=e.hours!=null?e.hours:hrsOf(e);
+  let body='<div class="notice info">Tetapkan jam bekerja untuk <b>syif ini sahaja</b> — cth: staff latihan 4 jam. Gaji dikira jam sebenar × kadar syif.</div>'+
+  '<div class="detailrow"><span>Staff</span><b>'+esc(st.name||'?')+'</b></div>'+
+  '<div class="detailrow"><span>Syif</span><b>'+fmtDateDS(e.date)+' · '+(e.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</b></div>'+
+  '<div class="detailrow"><span>Jam semasa</span><b>'+cur+' jam '+(e.hours!=null?'(custom)':'(default)')+'</b></div>'+
+  '<h3 style="margin-top:12px">Set kepada:</h3><div class="chips" style="margin:10px 0">'+
+  [2,3,4,5,6,7,8].map(h=>'<button class="btn btn-sm '+(cur===h?'btn-primary':'')+'" onclick="setEntryHours(\''+eid+'\','+h+')">'+h+' jam</button>').join('')+'</div>'+
+  '<label class="field"><span>Atau masuk nilai (1–12, langkah 0.5)</span><input type="number" id="hrVal" min="1" max="12" step="0.5" value="'+cur+'"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="setEntryHoursManual(\''+eid+'\')">💾 Simpan Jam Syif Ini</button>'+
+  '<p class="hint">Default khusus per staff boleh ditetap di tab Staf (butang ⏱ Jam).</p>';
+  openModal('⏱ Jam Bekerja — Syif Ini',body);
+}
+async function setEntryHours(eid,h){
+  const me=reqMgr();if(!me)return;
+  const {error}=await SB.from('schedule').update({hours:h}).eq('id',eid);
+  if(error)return toast(friendly(error),'err');
+  const e=DB.schedule.find(x=>x.id===eid);
+  await logAudit('hours_set',(usernameOf(e.staffId)||'?')+' · '+dShort(e.date)+' · '+h+' jam');
+  closeModal();await sync();render();toast('Jam syif dikemaskini: '+h+' jam ✔','ok');
+}
+async function setEntryHoursManual(eid){
+  const v=parseFloat(($('#hrVal')||{}).value);
+  if(isNaN(v)||v<1||v>12)return toast('Jam mesti antara 1–12','err');
+  await setEntryHours(eid,v);
+}
+function openStaffHoursModal(id){
+  const me=reqMgr();if(!me)return;
+  const t=DB.users.find(x=>x.id===id);if(!t||t.role!=='staff')return;
+  const S=DB.settings,cur=t.defaultHours;
+  let body='<div class="notice info">Jam <b>default</b> staff ini untuk semua syif (digunakan melainkan ada jam custom per syif). Contoh: staff baharu latihan = 4 jam, staff biasa = '+S.shiftHours+' jam.</div>'+
+  '<div class="detailrow"><span>Staff</span><b>'+esc(t.name)+'</b></div>'+
+  '<div class="detailrow"><span>Default semasa</span><b>'+(cur!=null?cur+' jam (kusus)':'Global '+S.shiftHours+' jam')+'</b></div>'+
+  '<h3 style="margin-top:12px">Set default:</h3><div class="chips" style="margin:10px 0">'+
+  '<button class="btn btn-sm '+(cur==null?'btn-primary':'')+'" onclick="setStaffDefaultHours(\''+id+'\',null)">Global ('+S.shiftHours+' jam)</button>'+
+  [2,3,4,5,6,7,8].map(h=>'<button class="btn btn-sm '+(cur===h?'btn-primary':'')+'" onclick="setStaffDefaultHours(\''+id+'\','+h+')">'+h+' jam</button>').join('')+'</div>'+
+  '<label class="field"><span>Atau masuk nilai (1–12, langkah 0.5)</span><input type="number" id="shVal" min="1" max="12" step="0.5" value="'+(cur!=null?cur:S.shiftHours)+'"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="setStaffDefaultHoursManual(\''+id+'\')">💾 Simpan Default</button>';
+  openModal('⏱ Jam Default — '+esc(t.name),body);
+}
+async function setStaffDefaultHours(id,h){
+  const me=reqMgr();if(!me)return;
+  const {error}=await SB.from('profiles').update({default_hours:h}).eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('staff_default_hours',(usernameOf(id)||'?')+' → '+(h==null?'global':h+' jam'));
+  closeModal();await sync();render();toast('Jam default dikemaskini ✔','ok');
+}
+async function setStaffDefaultHoursManual(id){
+  const v=parseFloat(($('#shVal')||{}).value);
+  if(isNaN(v)||v<1||v>12)return toast('Jam mesti antara 1–12','err');
+  await setStaffDefaultHours(id,v);
+}
+function openDeductionModal(){
+  const me=reqMgr();if(!me)return;
+  const mk=ROUTE.pmk||monthKey(todayStr());
+  const staff=DB.users.filter(x=>x.role==='staff'&&x.active!==false);
+  if(!staff.length)return toast('Tiada staff aktif','err');
+  openModal('➖ Potongan Gaji — '+monthLabel(mk),
+  '<div class="notice warn">Potongan ditolak automatik daripada slip gaji kitaran yang dipilih semasa dijana (cth: kesilapan masa closing). Jika slip sudah wujud — padam &amp; jana semula.</div>'+
+  '<label class="field"><span>Staff</span><select id="dcStaff">'+staff.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' ('+(s.payCycle==='monthly'?'Bulanan':'2-Minggu')+')</option>').join('')+'</select></label>'+
+  '<label class="field"><span>Kitaran slip yang dipotong</span><select id="dcCycle"><option value="M">Bulanan (1hb – akhir bulan)</option><option value="B1">2-Minggu · Kitaran 1 (1–14)</option><option value="B2">2-Minggu · Kitaran 2 (15–akhir)</option></select></label>'+
+  '<label class="field"><span>Jumlah potongan (RM)</span><input type="number" id="dcAmt" min="0.01" step="0.01" placeholder="cth: 20.00"></label>'+
+  '<label class="field"><span>Sebab (wajib — dipapar pada slip)</span><input id="dcReason" placeholder="cth: kesilapan masa closing 3/10"></label>'+
+  '<button class="btn btn-primary btn-big" onclick="submitDeduction()">➖ Tambah Potongan</button>');
+}
+async function submitDeduction(){
+  const me=reqMgr();if(!me)return;
+  const staffId=$('#dcStaff').value,cyc=$('#dcCycle').value,amt=parseFloat($('#dcAmt').value),reason=$('#dcReason').value.trim();
+  const mk=ROUTE.pmk||monthKey(todayStr());
+  const start=cyc==='B2'?mk+'-15':mk+'-01';
+  if(!staffId)return toast('Pilih staff','err');
+  if(isNaN(amt)||amt<=0||amt>99999)return toast('Jumlah tidak sah (0.01 – 99,999)','err');
+  if(!reason)return toast('Sebab wajib diisi','err');
+  const {error}=await SB.from('deductions').insert({staff_id:staffId,period_start:start,amount:amt,reason:reason,created_by:ME.id});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('deduction_add',(usernameOf(staffId)||'?')+' · '+rm2(amt)+' · '+reason);
+  closeModal();await sync();render();toast('Potongan ditambah ✔','ok');
+}
+async function delDeduction(id){
+  const me=reqMgr();if(!me)return;
+  const d=DB.deductions.find(x=>x.id===id);if(!d)return;
+  if(!confirm('Buang potongan '+rm2(d.amount)+' — '+d.reason+' ('+dShort(d.periodStart)+')?'))return;
+  const {error}=await SB.from('deductions').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('deduction_del',(usernameOf(d.staffId)||'?')+' · '+rm2(d.amount));
+  await sync();render();toast('Potongan dibuang','ok');
+}
+async function reopenPeriodJS(pk){
+  const me=reqMgr();if(!me)return;
+  if(!confirm('BUKA SEMULA '+periodLabel(pk)+'?\n\n• Jadual TIDAK lagi dikunci — staff boleh menempah syif semula\n• Tugasan sedia ada KEKAL (tidak dipadam)\n• Anda perlu "Keluarkan Jadual" semula selepas pengesahan\n• Slip sudah dijana tidak berubah'))return;
+  const {error}=await SB.rpc('reopen_period',{p_period:pk,p_label:periodLabel(pk)});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Tempoh dibuka semula — staff boleh menempah 🔓','ok');
+}
+
 
 /* ---------- 8. MODUL PERTUKARAN SYIF (PRD 5.4) ---------- */
 const SWAP_ST={pending_peer:['Menunggu Persetujuan Rakan','chip-wait'],pending_manager:['Menunggu Kelulusan Manager','chip-wait'],approved:['Diluluskan ✔','chip-ok'],declined:['Ditolak oleh Rakan','chip-no'],rejected:['Tidak Diluluskan Manager','chip-no']};
@@ -942,6 +1077,7 @@ function renderStaffCalendar(){
   const est=estimateFor(u.id);
   $('#viewRoot').innerHTML=
   '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
+  shiftInfoCardHTML()+upcomingShiftsHTML()+
   (pub?'<div class="notice ok">🔒 Jadual rasmi tempoh ini telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
       :'<div class="notice info">🗓️ Kitaran <b>2 minggu</b>: Tempoh 1 (1–15) &amp; Tempoh 2 (16–akhir bulan). Anda boleh menempah untuk <b>tempoh semasa &amp; tempoh seterusnya</b> sahaja — sehingga <b>'+dShort(winEnd)+'</b>. Status: <span class="chip chip-wait">Menunggu</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> · had '+DB.settings.maxPerShift+' staff/syif.</div>')+
   '<div class="cal-grid glass">'+cells+'</div>'+
@@ -999,10 +1135,10 @@ function renderStaffJadual(){
     html+='<div class="card glass"><h3>'+periodLabel(pk)+' · '+(pub?'Jadual Rasmi':'Tugasan Manager')+' '+(pub?'':'<span class="chip chip-wait">tempoh belum diterbitkan</span>')+'</h3>';
     sched.filter(e=>e.date>=b[0]&&e.date<=b[1]).forEach(e=>{
       const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null,past=e.date<todayStr();
-      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10–4':'🌙 Petang 4–10')+'</span>'+
+      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span><span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
       (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
       (past&&sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':past?'<span class="chip chip-wait">Jualan belum dimasukkan</span>':'')+'</div></div>'+
-      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(S.shiftHours*rate)+'</b>':'')+'</div>';
+      (!e.noShow&&past&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';;
     });
     html+='</div>';
   });
@@ -1032,6 +1168,7 @@ function renderStaffSlips(){
   '<div class="detailrow"><span>Bonus prestasi <small>(jualan '+rm(est.perf.sum)+')</small></span><b>'+(est.perf.ok?rm(S.perfBonus)+' ✔':'— belum layak')+'</b></div>'+
   '<div class="detailrow"><span>Bonus kehadiran</span><b>'+(est.att.ok?rm(S.attBonus)+' ✔':'— '+esc(est.att.why||''))+'</b></div>'+
   '<div class="detailrow"><span>Elaun typhoid</span><b>'+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':(u.typhoidCount<S.typhoidMax?rm(S.typhoidAllowance)+' ('+(u.typhoidCount+1)+'/'+S.typhoidMax+')':'— ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)'))+'</b></div>'+
+  (est.deduct?'<div class="detailrow"><span>Potongan tertunggak bulan ini</span><b style="color:#fecaca">−'+rm2(est.deduct)+'</b></div>':'')+
   '<div class="ps-totalbox"><span>ANGGARAN JUMLAH</span><span>'+rm(est.total)+'</span></div>'+
   '<p class="hint">Anggaran masa nyata — slip rasmi dijana oleh manager pada akhir kitaran gaji anda ('+(u.payCycle==='monthly'?'bulanan':'2-mingguan')+'). Tugasan kecemasan manager pada tarikh lampau turut dikira.</p></div>'+
   '<div class="card glass"><h3>Sejarah Slip Rasmi</h3>'+
@@ -1112,7 +1249,7 @@ function renderMBookings(){
   if(pub){
     const p=DB.published[pk];
     html+='<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan pada '+new Date(p.t).toLocaleDateString('ms-MY')+' oleh '+esc(p.by||'')+'. Tempoh ini dikunci — perubahan melalui Pertukaran Syif atau <b>Assign</b> di tab Jadual.</div>'+
-    '<div class="chips"><button class="btn btn-primary" onclick="setMTab(\'jad\')">🗓️ Jadual &amp; Assign Staff</button><button class="btn" onclick="bNav(1)">Tempoh seterusnya →</button></div>';
+    '<div class="chips"><button class="btn btn-primary" onclick="setMTab(\'jad\')">🗓️ Jadual &amp; Assign Staff</button><button class="btn" onclick="bNav(1)">Tempoh seterusnya →</button><button class="btn btn-danger" onclick="reopenPeriodJS(\''+pk+'\')">🔓 Buka Semula Tempoh</button></div>';
   }else{
     const bks=DB.bookings.filter(x=>x.date>=b[0]&&x.date<=b[1]);
     const pend=bks.filter(x=>x.status==='pending').length,ap=bks.filter(x=>x.status==='approved').length;
@@ -1149,6 +1286,7 @@ function renderMSchedule(){
   let html='<div class="pagehead"><h2>🗓️ Jadual Rasmi &amp; Assign Staff</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
   html+=pub?'<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan &amp; dikunci. Anda masih boleh <b>assign staff ke slot kosong</b> (termasuk tarikh lampau untuk kecemasan) — kesan gaji retrospektif.</div>'
         :'<div class="notice warn">Tempoh ini <b>belum dikeluarkan</b>. Anda boleh (a) sahkan tempahan &amp; keluarkan jadual di tab Tempahan, ATAU (b) assign staff terus ke slot di bawah.</div>';
+  if(pub)html+='<div class="chips" style="margin:8px 0"><button class="btn btn-sm btn-danger" onclick="reopenPeriodJS(\''+pk+'\')">🔓 Buka Semula Tempoh Ini (staff boleh menempah semula)</button></div>';
   if(DB.payslips.some(p=>p.monthKey===pk.slice(0,7)))
     html+='<div class="notice warn">⚠ Terdapat slip gaji telah dijana untuk bulan ini. Jika anda mengubah tugasan tarikh lampau, <b>padam &amp; jana semula slip</b> berkenaan di tab Gaji supaya angka tepat.</div>';
   let anySlot=false;
@@ -1163,8 +1301,11 @@ function renderMSchedule(){
       ' '+(sale!=null?'<span class="chip '+(rate>S.baseRate?'chip-ok':'chip-info')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div>';
       es.forEach(e=>{
         const st=DB.users.find(u=>u.id===e.staffId);
-        block+='<div class="brow"><div><b>'+esc(st?st.name:'?')+'</b> '+(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+'</div>'+
+        const h=hrsOf(e);
+        block+='<div class="brow"><div><b>'+esc(st?st.name:'?')+'</b> '+(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
+        ' <span class="chip '+(e.hours!=null?'chip-ok':'')+'" title="Jam bekerja syif ini">'+(e.hours!=null?'⏱ '+e.hours+' jam (custom)':'⏱ '+h+' jam')+'</span></div>'+
         '<div class="brow-act">'+
+        '<button class="btn btn-sm" onclick="openHoursModal(\''+e.id+'\')" title="Laraskan jam syif ini">⏱ Jam</button>'+
         '<button class="btn btn-sm '+(e.noShow?'btn-ok':'btn-danger')+'" onclick="toggleNoShow(\''+e.id+'\')">'+(e.noShow?'↩ Hadir':'✕ Tidak Hadir')+'</button>'+
         '<button class="btn btn-sm ghost" onclick="mgrRemoveAssign(\''+e.id+'\')" title="Buang tugasan">🗑</button></div></div>';
       });
@@ -1236,6 +1377,11 @@ function renderMPayroll(){
   if(!monthly.length&&!bi.length)html+='<div class="card glass"><p style="opacity:.7">Tiada staff aktif.</p></div>';
   html+='<div class="card glass"><h3>Slip Dijana — '+monthLabel(mk)+' ('+slips.length+')</h3>'+
   (slips.length?slips.map(p=>'<div class="brow"><div><b>'+esc(p.staffName)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+dShort(p.start)+' – '+dShort(p.end)+'</span><span class="chip">'+(p.cycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip chip-ok">'+p.hours+' jam</span></div></div><div class="brow-act"><b class="amt">'+rm(p.total)+'</b><button class="btn btn-sm" onclick="viewSlip(\''+p.id+'\')" title="Lihat">👁</button><button class="btn btn-sm" onclick="downloadSlip(\''+p.id+'\')" title="PDF">⬇</button><button class="btn btn-sm btn-danger" onclick="deleteSlip(\''+p.id+'\')" title="Padam">🗑</button></div></div>').join(''):'<p style="opacity:.7">Belum ada slip untuk bulan ini.</p>')+'</div>'+
+  const deds=DB.deductions.filter(d=>monthKey(d.periodStart)===mk);
+  html+='<div class="card glass"><h3>✂️ Potongan Gaji — '+monthLabel(mk)+' ('+deds.length+')</h3>'+
+  (deds.length?deds.map(d=>{const st=DB.users.find(u=>u.id===d.staffId);return '<div class="brow"><div><b>'+(st?esc(st.name):'?')+'</b> <span class="chip chip-info">Slip mula '+dShort(d.periodStart)+'</span><div class="chips" style="margin-top:4px"><span class="chip chip-warn">✂️ '+esc(d.reason)+'</span></div></div><div class="brow-act"><b class="amt" style="color:#fecaca">−'+rm2(d.amount)+'</b><button class="btn btn-sm btn-danger" onclick="delDeduction(\''+d.id+'\')" title="Buang">🗑</button></div></div>'}).join(''):'<p style="opacity:.7">Tiada potongan untuk bulan ini.</p>')+
+  '<button class="btn btn-primary btn-big" onclick="openDeductionModal()">➖ Tambah Potongan</button>'+
+  '<p class="hint">Potongan ditolak automatik semasa slip kitaran berkenaan dijana &amp; dipapar pada slip (sebab dimaklumkan kepada staff). Slip sedia ada: padam &amp; jana semula.</p></div>'+
   '<div class="card glass"><h3>📖 Ringkasan Peraturan Gaji (PRD Seksyen 6)</h3><ul class="seclist">'+
   '<li>Kadar asas '+rm(S.baseRate)+'/jam; <b>'+rm(S.highRate)+'/jam</b> untuk syif dengan jualan &gt; '+rm(S.weekdayThreshold)+' (weekday) / &gt; '+rm(S.weekendThreshold)+' (weekend) — dinilai <b>setiap syif</b>.</li>'+
   '<li>Bonus prestasi '+rm(S.perfBonus)+': jumlah jualan <b>semua syif staff tersebut</b> sebulan &gt; '+rm(S.monthlySalesThreshold)+'.</li>'+
@@ -1259,7 +1405,7 @@ function renderMStaff(){
     return '<div class="card glass"><div class="brow"><div><b>'+esc(x.name)+'</b> '+(inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
     '<div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin')+'</span><span class="chip">'+esc(x.username)+'</span>'+
     (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'" title="Kitaran gaji">'+(x.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip">💉 Typhoid '+x.typhoidCount+'/'+DB.settings.typhoidMax+'</span>':'')+'</div></div>'+
-    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button><button class="btn btn-sm" onclick="openTyphoidModal(\''+x.id+'\')" title="Laraskan elaun typhoid">💉 Typhoid</button>':'')+
+    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button><button class="btn btn-sm" onclick="openTyphoidModal(\''+x.id+'\')" title="Laraskan elaun typhoid">💉 Typhoid</button><button class="btn btn-sm" onclick="openStaffHoursModal(\''+x.id+'\')" title="Jam default staff ini">⏱ Jam</button>':'')+
     '<button class="btn btn-sm" onclick="openResetPin(\''+x.id+'\')">🔑 Set Semula PIN</button>'+
     (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
     (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+'</div>';
