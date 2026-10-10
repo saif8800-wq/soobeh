@@ -1488,7 +1488,7 @@ function renderMPayroll(){
   html+='<div class="card glass"><h3>✂️ Potongan Gaji — '+monthLabel(mk)+' ('+deds.length+')</h3>'+
   (deds.length?deds.map(d=>{const st=DB.users.find(u=>u.id===d.staffId);return '<div class="brow"><div><b>'+(st?esc(st.name):'?')+'</b> <span class="chip chip-info">Slip mula '+dShort(d.periodStart)+'</span><div class="chips" style="margin-top:4px"><span class="chip chip-warn">✂️ '+esc(d.reason)+'</span></div></div><div class="brow-act"><b class="amt" style="color:#fecaca">−'+rm2(d.amount)+'</b><button class="btn btn-sm btn-danger" onclick="delDeduction(\''+d.id+'\')" title="Buang">🗑</button></div></div>'}).join(''):'<p style="opacity:.7">Tiada potongan untuk bulan ini.</p>')+
   '<button class="btn btn-primary btn-big" onclick="openDeductionModal()">➖ Tambah Potongan</button>'+
-  '<p class="hint">Potongan ditolak automatik semasa slip kitaran berkenaan dijana &amp; dipapar pada slip (sebab dimaklumkan kepada staff). Slip sedia ada: padam &amp; jana semula.</p></div>'+
+  '<p class="hint">Potongan ditolak automatik semasa slip kitaran berkenaan dijana &amp; dipapar pada slip (sebab dimaklumkan kepada staff). Slip sedia ada: padam &amp; jana semula.</p></div>';
   const SG=DB.settings;
   const attRows=DB.users.filter(x=>x.role==='staff'&&x.active!==false).map(x=>{
     const att=DB.attendance.filter(a=>a.staffId===x.id&&monthKey(a.date)===mk);
