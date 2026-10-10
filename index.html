@@ -240,8 +240,8 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
-const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
+const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -254,7 +254,7 @@ const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.
 const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
 const mapNotif=(r)=>({id:r.id,userId:r.user_id,msg:r.msg,read:r.read,t:Date.parse(r.created_at)});
 const mapAudit=(r)=>({t:Date.parse(r.at),by:r.by_username||'system',action:r.action,detail:r.detail||''});
-const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true}:Object.assign({},DEF_SET);
+const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true,storeLat:r.store_lat!=null?+r.store_lat:null,storeLng:r.store_lng!=null?+r.store_lng:null,geofenceRadius:+r.geofence_radius||50}:Object.assign({},DEF_SET);
 
 async function loadAll(){
   if(!ME)return;
@@ -282,6 +282,8 @@ async function loadAll(){
   DB.settings=mapSettings((q[8].data||[])[0]);
   const dd=await SB.from('deductions').select('*').order('created_at',{ascending:false});
   DB.deductions=(dd.data||[]).map(r=>({id:r.id,staffId:r.staff_id,periodStart:r.period_start,amount:+r.amount,reason:r.reason||'',t:Date.parse(r.created_at)}));
+  const att=await SB.from('attendance').select('*').order('date',{ascending:false}).limit(500);
+  DB.attendance=(att.data||[]).map(r=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,punchIn:r.punch_in?Date.parse(r.punch_in):null,punchOut:r.punch_out?Date.parse(r.punch_out):null,late:!!r.late,dist:r.pin_dist!=null?+r.pin_dist:null}));
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
 }
 async function sync(){await loadAll()}
@@ -372,6 +374,7 @@ function attEligible(staffId,mk){
   if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir'};
   const inv=DB.swaps.filter(s=>{const e=DB.schedule.find(x=>x.id===s.entryId);return e&&monthKey(e.date)===mk&&(s.fromStaffId===staffId||s.toStaffId===staffId)});
   if(inv.length)return {ok:false,why:'Terdapat rekod pertukaran syif'};
+  if(DB.attendance.some(a=>a.staffId===staffId&&monthKey(a.date)===mk&&a.late))return {ok:false,why:'Terdapat rekod punch-in LAMBAT'};
   return {ok:true,why:''};
 }
 function estimateFor(staffId){
@@ -713,7 +716,72 @@ async function reopenPeriodJS(pk){
   if(error)return toast(friendly(error),'err');
   await sync();render();toast('Tempoh dibuka semula — staff boleh menempah 🔓','ok');
 }
-
+/* ---------- 7d. KEHADIRAN GPS: PUNCH IN/OUT + LOKASI KEDAI ---------- */
+function distM(la1,lo1,la2,lo2){const R=6371000,r=Math.PI/180,dLa=(la2-la1)*r,dLo=(lo2-lo1)*r;const a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)))}
+function fmtT(t){return t?new Date(t).toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'}):'—'}
+function renderStaffAttendance(){
+  const u=currentUser(),S=DB.settings,mk=monthKey(todayStr());
+  const mine=DB.attendance.filter(a=>a.staffId===u.id&&monthKey(a.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
+  const todays=DB.schedule.filter(e=>e.staffId===u.id&&e.date===todayStr());
+  let html='<div class="pagehead"><h2>📍 Kehadiran (Punch In/Out)</h2></div>';
+  if(S.storeLat==null)html+='<div class="notice warn">⚠ Manager belum menetapkan lokasi kedai — punch tidak dapat dibuat buat masa ini.</div>';
+  if(!todays.length)html+='<div class="notice info">Tiada syif anda hari ini — punch hanya tersedia pada hari anda bertugas.</div>';
+  todays.forEach(e=>{
+    const rec=DB.attendance.find(a=>a.staffId===u.id&&a.date===todayStr()&&a.shift===e.shift);
+    const startT=e.shift==='morning'?'10:00':'16:00';
+    let btn;
+    if(!rec||!rec.punchIn)btn='<button class="btn btn-ok btn-big" onclick="doPunch(\''+e.shift+'\',\'in\',this)">🟢 PUNCH IN</button>';
+    else if(!rec.punchOut)btn='<button class="btn btn-danger btn-big" onclick="doPunch(\''+e.shift+'\',\'out\',this)">🔴 PUNCH OUT</button>';
+    else btn='<div class="notice ok">✔ Syif hari ini lengkap — In '+fmtT(rec.punchIn)+' · Out '+fmtT(rec.punchOut)+'</div>';
+    html+='<div class="card glass"><h3>'+(e.shift==='morning'?'☀ Syif Pagi':'🌙 Syif Petang')+' — Hari Ini</h3>'+
+    '<div class="detailrow"><span>Syif bermula</span><b>'+startT+'</b></div>'+
+    '<div class="detailrow"><span>Punch In</span><b>'+(rec&&rec.punchIn?fmtT(rec.punchIn)+(rec.late?' <span class="chip chip-warn">LAMBAT</span>':' <span class="chip chip-ok">tepat</span>'):'—')+'</b></div>'+
+    '<div class="detailrow"><span>Punch Out</span><b>'+(rec&&rec.punchOut?fmtT(rec.punchOut):'—')+'</b></div>'+btn+
+    '<p class="hint">Butang hanya berfungsi dalam radius '+S.geofenceRadius+'m dari kedai. Punch in selepas '+startT+' = <b>LAMBAT</b> → hilang kelayakan Bonus Kehadiran bulan ini.</p></div>';
+  });
+  html+='<div class="card glass"><h3>📜 Rekod Kehadiran Bulan Ini ('+mine.length+')</h3>'+
+  (mine.length?mine.map(a=>'<div class="brow"><div><b>'+dShort(a.date)+'</b> <span class="chip chip-info">'+(a.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span></div><div class="chips">'+
+  '<span class="chip '+(a.late?'chip-warn':'chip-ok')+'">In '+fmtT(a.punchIn)+(a.late?' ⚠LAMBAT':'')+'</span>'+
+  '<span class="chip'+(a.punchOut?' chip-ok':'')+'">Out '+fmtT(a.punchOut)+'</span></div></div>').join(''):'<p style="opacity:.7">Tiada rekod bulan ini.</p>')+'</div>';
+  $('#viewRoot').innerHTML=html;
+}
+async function doPunch(shift,type,btn){
+  const u=currentUser();if(!u||u.role!=='staff')return;
+  if(!navigator.geolocation)return toast('Pelayar anda tidak menyokong GPS','err');
+  const S=DB.settings;
+  if(S.storeLat==null)return toast('Manager belum menetapkan lokasi kedai','err');
+  const old=btn?btn.textContent:null;if(btn){btn.disabled=true;btn.textContent='📡 Mengesan GPS...'}
+  const done=()=>{if(btn){btn.disabled=false;btn.textContent=old}};
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=pos.coords.latitude,lng=pos.coords.longitude;
+    const d=distM(S.storeLat,S.storeLng,lat,lng);
+    if(d>S.geofenceRadius){done();return toast('📍 Terlalu jauh: '+d+'m dari kedai (had '+S.geofenceRadius+'m) — hampiri kedai dahulu','err')}
+    const {data,error}=await SB.rpc('punch',{p_shift:shift,p_type:type,p_lat:lat,p_lng:lng});
+    done();
+    if(error)return toast(friendly(error),'err');
+    await sync();render();
+    toast((type==='in'?'🟢 Punch IN':'🔴 Punch OUT')+' direkodkan '+data.time+' ('+data.dist+'m)'+(data.late?' — LAMBAT ⚠ bonus kehadiran terjejas':' ✔'),'ok');
+  },err=>{done();toast('GPS gagal: '+err.message+' — aktifkan lokasi telefon & cuba semula','err')},{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+}
+async function saveStoreLoc(){
+  const me=reqMgr();if(!me)return;
+  const lat=parseFloat(($('#slLat')||{}).value),lng=parseFloat(($('#slLng')||{}).value),rad=parseFloat(($('#slRad')||{}).value)||50;
+  if(isNaN(lat)||lat<-90||lat>90||isNaN(lng)||lng<-180||lng>180)return toast('Koordinat tidak sah (lat -90..90, lng -180..180)','err');
+  if(isNaN(rad)||rad<10||rad>2000)return toast('Radius mesti 10–2000 meter','err');
+  const {error}=await SB.rpc('set_store_location',{p_lat:lat,p_lng:lng,p_radius:rad});
+  if(error)return toast(friendly(error),'err');
+  await logAudit('store_location','kedai → '+lat.toFixed(5)+','+lng.toFixed(5)+' (±'+rad+'m)');
+  await sync();render();toast('Lokasi kedai disimpan ✔','ok');
+}
+function fillMyLoc(){
+  if(!navigator.geolocation)return toast('GPS tidak disokong','err');
+  toast('📡 Mengesan lokasi anda...','info');
+  navigator.geolocation.getCurrentPosition(p=>{
+    if($('#slLat'))$('#slLat').value=p.coords.latitude.toFixed(6);
+    if($('#slLng'))$('#slLng').value=p.coords.longitude.toFixed(6);
+    toast('Lokasi diisi — semak & tekan Simpan ✔','ok');
+  },e=>toast('GPS gagal: '+e.message,'err'),{enableHighAccuracy:true,timeout:20000});
+}
 
 /* ---------- 8. MODUL PERTUKARAN SYIF (PRD 5.4) ---------- */
 const SWAP_ST={pending_peer:['Menunggu Persetujuan Rakan','chip-wait'],pending_manager:['Menunggu Kelulusan Manager','chip-wait'],approved:['Diluluskan ✔','chip-ok'],declined:['Ditolak oleh Rakan','chip-no'],rejected:['Tidak Diluluskan Manager','chip-no']};
@@ -1044,7 +1112,7 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
-const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'hadir',ic:'📍',lb:'Hadir'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
 function renderStaffShell(){
   const u=currentUser();
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
@@ -1054,7 +1122,7 @@ function renderStaffShell(){
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<main class="wrap"><div id="viewRoot"></div></main>'+
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
-  ({cal:renderStaffCalendar,jad:renderStaffJadual,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
+  ({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
 }
 function slotPill(ds,shift,pub,locked){
   const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
@@ -1404,7 +1472,7 @@ function renderMPayroll(){
   '<div class="detailrow"><span>Status</span><b>'+(S.attBonusEnabled?'<span class="chip chip-ok">AKTIF — slip baharu termasuk bonus (jika layak)</span>':'<span class="chip chip-no">DIMATIKAN</span>')+'</b></div>'+
   '<div class="detailrow"><span>Kadar</span><b>'+rm(S.attBonus)+' · maksimum sekali sebulan setiap staff</b></div>'+
   '<button class="btn '+(S.attBonusEnabled?'btn-danger':'btn-ok')+' btn-big" onclick="toggleAttBonus()">'+(S.attBonusEnabled?'⏸ Matikan Bonus Kehadiran':'▶ Aktifkan Bonus Kehadiran')+'</button>'+
-  '<p class="hint">Aliran disyorkan: aktifkan pada <b>akhir bulan</b> → jana slip terakhir bulan → matikan semula. Hanya staff <b>hadir penuh + tiada tidak-hadir + tiada pertukaran syif</b> layak. Slip 2-mingguan hanya terima bonus pada slip Kitaran 2 — Kitaran 1 tidak pernah termasuk.</p></div>';
+  '<p class="hint">Aliran disyorkan: aktifkan pada <b>akhir bulan</b> → jana slip terakhir bulan → matikan semula. Hanya staff <b>hadir penuh + tiada tidak-hadir, tiada pertukaran syif & <b>tiada punch-in lambat</b> layak. Slip 2-mingguan hanya terima bonus pada slip Kitaran 2 — Kitaran 1 tidak pernah termasuk.</p></div>';
   if(monthly.length)html+='<div class="card glass"><h3>📅 Kumpulan Bulanan — 1 hingga '+dim+' ('+monthly.length+' staff)</h3>'+
     monthly.map(u=>{const p=slipFor(u.id,mk+'-01');return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div>'+(p?'<span class="chip chip-ok">RM '+p.total.toFixed(2)+'</span>':'<span class="chip chip-wait">Belum dijana</span>')+'</div>'}).join('')+
     '<button class="btn btn-primary btn-big" onclick="genPayslips(\'M\')">🧾 Jana Slip — Kitaran Bulanan</button></div>';
@@ -1421,6 +1489,24 @@ function renderMPayroll(){
   (deds.length?deds.map(d=>{const st=DB.users.find(u=>u.id===d.staffId);return '<div class="brow"><div><b>'+(st?esc(st.name):'?')+'</b> <span class="chip chip-info">Slip mula '+dShort(d.periodStart)+'</span><div class="chips" style="margin-top:4px"><span class="chip chip-warn">✂️ '+esc(d.reason)+'</span></div></div><div class="brow-act"><b class="amt" style="color:#fecaca">−'+rm2(d.amount)+'</b><button class="btn btn-sm btn-danger" onclick="delDeduction(\''+d.id+'\')" title="Buang">🗑</button></div></div>'}).join(''):'<p style="opacity:.7">Tiada potongan untuk bulan ini.</p>')+
   '<button class="btn btn-primary btn-big" onclick="openDeductionModal()">➖ Tambah Potongan</button>'+
   '<p class="hint">Potongan ditolak automatik semasa slip kitaran berkenaan dijana &amp; dipapar pada slip (sebab dimaklumkan kepada staff). Slip sedia ada: padam &amp; jana semula.</p></div>'+
+  const SG=DB.settings;
+  const attRows=DB.users.filter(x=>x.role==='staff'&&x.active!==false).map(x=>{
+    const att=DB.attendance.filter(a=>a.staffId===x.id&&monthKey(a.date)===mk);
+    const late=att.filter(a=>a.late).length;
+    const el=attEligible(x.id,mk);
+    return '<tr><td>'+esc(x.name)+'</td><td>'+att.length+'</td><td>'+(late?'<span class="chip chip-warn">'+late+' lambat</span>':'<span class="chip chip-ok">0</span>')+'</td><td>'+(el.ok?'<span class="chip chip-ok">LAYAK</span>':'<span class="chip chip-no" title="'+esc(el.why)+'">TIDAK</span>')+'</td></tr>';
+  }).join('');
+  html+='<div class="card glass"><h3>📍 Lokasi Kedai (Geofence Punch)</h3>'+
+  '<div class="detailrow"><span>Lokasi kedai</span><b>'+(SG.storeLat!=null?SG.storeLat.toFixed(5)+', '+SG.storeLng.toFixed(5)+' · ±'+SG.geofenceRadius+'m':'<span class="chip chip-warn">BELUM DITETAPKAN</span>')+'</b></div>'+
+  '<div class="formgrid"><label class="field"><span>Latitude</span><input id="slLat" value="'+(SG.storeLat!=null?SG.storeLat:'')+'" placeholder="cth: 3.139003"></label>'+
+  '<label class="field"><span>Longitude</span><input id="slLng" value="'+(SG.storeLng!=null?SG.storeLng:'')+'" placeholder="cth: 101.686855"></label>'+
+  '<label class="field"><span>Radius geofence (meter)</span><input type="number" id="slRad" min="10" max="2000" value="'+SG.geofenceRadius+'"></label></div>'+
+  '<div class="chips" style="margin:8px 0"><button class="btn btn-sm" onclick="fillMyLoc()">📍 Guna Lokasi Saya Sekarang</button>'+
+  '<button class="btn btn-primary btn-sm" onclick="saveStoreLoc()">💾 Simpan Lokasi Kedai</button></div>'+
+  '<p class="hint">Berdiri <b>di dalam kedai</b> → tekan "Guna Lokasi Saya" → Simpan. GPS jalur tepat boleh berubah ±10–20m — naikkan radius jika staff kerap tersasar.</p></div>'+
+  '<div class="card glass"><h3>📋 Kehadiran & Kelayakan Bonus — '+monthLabel(mk)+'</h3>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Punch In</th><th>Lambat</th><th>Layak Bonus</th></tr>'+attRows+'</table></div>'+
+  '<p class="hint">Layak = hadir penuh, tiada tidak-hadir, tiada pertukaran syif & <b>tiada punch-in lambat</b> bulan ini.</p></div>'+
   '<div class="card glass"><h3>📖 Ringkasan Peraturan Gaji (PRD Seksyen 6)</h3><ul class="seclist">'+
   '<li>Kadar asas '+rm(S.baseRate)+'/jam; <b>'+rm(S.highRate)+'/jam</b> untuk syif dengan jualan &gt; '+rm(S.weekdayThreshold)+' (weekday) / &gt; '+rm(S.weekendThreshold)+' (weekend) — dinilai <b>setiap syif</b>.</li>'+
   '<li>Bonus prestasi '+rm(S.perfBonus)+': jumlah jualan <b>semua syif staff tersebut</b> sebulan &gt; '+rm(S.monthlySalesThreshold)+'.</li>'+
