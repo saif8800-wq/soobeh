@@ -398,7 +398,7 @@ async function generatePayslip(staffId,pStart,pEnd){
   const typh=(S.typhoidEnabled!==false&&typhCountBefore<S.typhoidMax)?S.typhoidAllowance:0;
   if(typh)staff.typhoidCount++;
   const perfAmt=(includeBonus&&perf.ok)?S.perfBonus:0;
-  const attAmt=(includeBonus&&att.ok)?S.attBonus:0;
+  const attAmt=(includeBonus&&att.ok&&S.attBonusEnabled)?S.attBonus:0;
   const deducts=DB.deductions.filter(d=>d.staffId===staffId&&d.periodStart===pStart);
   const deductAmt=deducts.reduce((a,d)=>a+d.amount,0);
   const total=c.basePay+c.extraPay+perfAmt+attAmt+typh-deductAmt;
