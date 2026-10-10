@@ -240,7 +240,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
-const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true};
+const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false};
 function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
@@ -254,7 +254,7 @@ const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.
 const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
 const mapNotif=(r)=>({id:r.id,userId:r.user_id,msg:r.msg,read:r.read,t:Date.parse(r.created_at)});
 const mapAudit=(r)=>({t:Date.parse(r.at),by:r.by_username||'system',action:r.action,detail:r.detail||''});
-const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false}:Object.assign({},DEF_SET);
+const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true}:Object.assign({},DEF_SET);
 
 async function loadAll(){
   if(!ME)return;
@@ -381,7 +381,7 @@ function estimateFor(staffId){
   const st=DB.users.find(u=>u.id===staffId)||{};
   const typh=(S.typhoidEnabled!==false&&st.typhoidCount<S.typhoidMax)?S.typhoidAllowance:0;
   const deduct=DB.deductions.filter(d=>d.staffId===staffId&&monthKey(d.periodStart)===mk).reduce((a,d)=>a+d.amount,0);
-  return {c:c,perf:perf,att:att,typh:typh,deduct:deduct,total:c.basePay+c.extraPay+(perf.ok?S.perfBonus:0)+(att.ok?S.attBonus:0)+typh-deduct};
+  return {c:c,perf:perf,att:att,typh:typh,deduct:deduct,total:c.basePay+c.extraPay+(perf.ok?S.perfBonus:0)+((att.ok&&S.attBonusEnabled)?S.attBonus:0)+typh-deduct};
 }
 
 /* ---------- 6. SLIP GAJI ---------- */
@@ -404,7 +404,7 @@ async function generatePayslip(staffId,pStart,pEnd){
   const total=c.basePay+c.extraPay+perfAmt+attAmt+typh-deductAmt;
   const slip={staffName:staff.name,username:staff.username,cycle:staff.payCycle,start:pStart,end:pEnd,
     shiftCount:c.shifts.length,hours:c.totalHours,basePay:c.basePay,highHours:c.highHours,extraPay:c.extraPay,
-    salesSum:c.salesSum,perfSum:perf.sum,perfAmt:perfAmt,attAmt:attAmt,attWhy:att.ok?'':att.why,includeBonus:includeBonus,
+    salesSum:c.salesSum,perfSum:perf.sum,perfAmt:perfAmt,attAmt:attAmt,attWhy:att.ok?'':att.why,attOff:S.attBonusEnabled!==true,includeBonus:includeBonus,
     typh:typh,typhNo:typh?typhCountBefore+1:null,typhCountBefore:typhCountBefore,typhOff:S.typhoidEnabled===false,deductionAmt:deductAmt,deductions:deducts.map(d=>({amount:d.amount,reason:d.reason})),total:total,shifts:c.shifts,
     t:Date.now(),by:ME.username};
   const {error}=await SB.from('payslips').insert({staff_id:staffId,start:pStart,end:pEnd,cycle:staff.payCycle,payload:slip,created_by:ME.id});
@@ -440,7 +440,7 @@ async function deleteSlip(id){
 function slipBodyHTML(p){
   const S=DB.settings;
   const perfNote=p.includeBonus?(p.perfAmt?'Jualan syif anda sebulan '+rm(p.perfSum)+' > '+rm(S.monthlySalesThreshold):'Jualan sebulan '+rm(p.perfSum)+' tidak melebihi '+rm(S.monthlySalesThreshold)):'Bonus dinilai bulanan — masuk pada slip kitaran kedua';
-  const attNote=p.includeBonus?(p.attAmt?'Hadir penuh, tiada tidak-hadir & tiada pertukaran syif':p.attWhy):'Bonus dinilai bulanan — masuk pada slip kitaran kedua';
+  const attNote=p.includeBonus?(p.attAmt?'Hadir penuh, tiada tidak-hadir & tiada pertukaran syif':(p.attOff?'Dimatikan oleh manager — tidak termasuk slip ini':p.attWhy)):'Bonus dinilai bulanan — masuk pada slip kitaran kedua';
   const typhTxt=p.typh?rm2(p.typh)+' <small>(Bayaran '+p.typhNo+'/'+S.typhoidMax+')</small>':(p.typhOff?'— <small>(dimatikan semasa slip dijana)</small>':'— <small>('+S.typhoidMax+'/'+S.typhoidMax+' selesai)</small>');
   let h='<div class="detailrow"><span>Tempoh</span><b>'+dShort(p.start)+' – '+dShort(p.end)+'</b></div>'+
   '<div class="detailrow"><span>Kitaran</span><b>'+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</b></div>'+
@@ -472,7 +472,7 @@ return '<div class="payslip"><div class="ps-head"><div><img src="logo.png" style
   line('Gaji Asas — '+p.hours+' jam × RM '+S.baseRate.toFixed(2)+'/jam',p.basePay.toFixed(2))+
   (p.extraPay>0?line('Tambahan Kadar Tinggi — '+p.highHours+' jam × RM '+(S.highRate-S.baseRate).toFixed(2)+'/jam',p.extraPay.toFixed(2)):'')+
   line('Bonus Prestasi Jualan'+(p.perfAmt?'':' — tidak layak (jualan sebulan RM '+p.perfSum.toFixed(2)+')'),(p.perfAmt||0).toFixed(2))+
-  line('Bonus Kehadiran & Disiplin'+(p.attAmt?'':' — tidak layak'),(p.attAmt||0).toFixed(2))+
+  line('Bonus Kehadiran & Disiplin'+(p.attAmt?'':' — '+(p.attOff?'dimatikan oleh manager':'tidak layak')),(p.attAmt||0).toFixed(2))+
   line('Elaun Suntikan Typhoid'+(p.typh?' (Bayaran '+p.typhNo+'/'+S.typhoidMax+')':(p.typhOff?' (dimatikan)':' ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)')),(p.typh||0).toFixed(2))+
   (p.deductions&&p.deductions.length?p.deductions.map(d=>line('Potongan — '+esc(d.reason||'tiada sebab'),'−'+d.amount.toFixed(2))).join(''):'')+'</table>'+
   (rows?'<table><tr><th>Tarikh</th><th>Syif</th><th>Jam</th><th>Jualan Syif</th><th>Kadar/Jam</th><th style="text-align:right">Jumlah</th></tr>'+rows+'</table>':'')+
@@ -828,6 +828,19 @@ async function toggleTyphoidEnabled(){
   await logAudit(nv?'typhoid_enable':'typhoid_disable','Elaun typhoid '+(nv?'AKTIF':'DIMATIKAN')+' oleh '+ME.username);
   await sync();render();
   toast(nv?'▶ Bayaran elaun typhoid AKTIF — mula ditambah pada slip baharu 💉':'⏸ Bayaran elaun typhoid DIMATIKAN',nv?'ok':'info');
+}
+
+async function toggleAttBonus(){
+  const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
+  const nv=DB.settings.attBonusEnabled!==true;
+  if(nv&&!confirm('AKTIFKAN Bonus Kehadiran ('+rm(DB.settings.attBonus)+')?\n\nSlip yang dijana SELEPAS ini akan termasuk bonus untuk staff yang layak (hadir penuh, tiada tidak-hadir & tiada pertukaran syif). Slip sedia ada tidak berubah.'))return;
+  if(!nv&&!confirm('MATIKAN Bonus Kehadiran?\n\nSlip yang dijana selepas ini TIDAK akan termasuk bonus kehadiran.'))return;
+  const {error}=await SB.rpc('set_att_bonus_enabled',{p_enabled:nv});
+  if(error)return toast(friendly(error),'err');
+  await logAudit(nv?'attbonus_enable':'attbonus_disable','Bonus kehadiran '+(nv?'AKTIF':'DIMATIKAN')+' oleh '+ME.username);
+  await sync();render();
+  toast(nv?'▶ Bonus kehadiran AKTIF untuk slip baharu 🎯':'⏸ Bonus kehadiran DIMATIKAN',nv?'ok':'info');
+}
 }
 
 function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
@@ -1188,7 +1201,7 @@ function renderStaffSlips(){
   '<div class="detailrow"><span>Syif &amp; jam</span><b>'+est.c.shifts.length+' syif · '+est.c.totalHours+' jam</b></div>'+
   '<div class="detailrow"><span>Gaji asas + kadar tinggi</span><b>'+rm(est.c.basePay+est.c.extraPay)+'</b></div>'+
   '<div class="detailrow"><span>Bonus prestasi <small>(jualan '+rm(est.perf.sum)+')</small></span><b>'+(est.perf.ok?rm(S.perfBonus)+' ✔':'— belum layak')+'</b></div>'+
-  '<div class="detailrow"><span>Bonus kehadiran</span><b>'+(est.att.ok?rm(S.attBonus)+' ✔':'— '+esc(est.att.why||''))+'</b></div>'+
+  '<div class="detailrow"><span>Bonus kehadiran</span><b>'+(S.attBonusEnabled?(est.att.ok?rm(S.attBonus)+' ✔':'— '+esc(est.att.why||'')):'<span class="chip chip-no">DIMATIKAN</span>')+'</b></div>'+
   '<div class="detailrow"><span>Elaun typhoid</span><b>'+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':(u.typhoidCount<S.typhoidMax?rm(S.typhoidAllowance)+' ('+(u.typhoidCount+1)+'/'+S.typhoidMax+')':'— ('+S.typhoidMax+'/'+S.typhoidMax+' selesai)'))+'</b></div>'+
   (est.deduct?'<div class="detailrow"><span>Potongan tertunggak bulan ini</span><b style="color:#fecaca">−'+rm2(est.deduct)+'</b></div>':'')+
   '<div class="ps-totalbox"><span>ANGGARAN JUMLAH</span><span>'+rm(est.total)+'</span></div>'+
@@ -1387,7 +1400,12 @@ function renderMPayroll(){
   const withSales=new Set(DB.sales.filter(s=>monthKey(s.date)===mk).map(s=>s.date+'|'+s.shift));
   const slipFor=(id,start)=>DB.payslips.find(p=>p.staffId===id&&p.start===start);
   let html='<div class="pagehead"><h2>🧾 Jana Slip Gaji</h2><div class="monthnav glass"><button onclick="pNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="pNav(1)">▶</button></div></div>'+
-  '<div class="notice '+(withSales.size<slots.size?'warn':'ok')+'">📶 Jualan dimasukkan: '+withSales.size+'/'+slots.size+' slot bulan ini. '+(withSales.size<slots.size?'Slot tanpa jualan dikira pada kadar asas RM'+S.baseRate.toFixed(0)+'/jam — pastikan semua jualan dimasukkan sebelum jana untuk ketepatan 100%.':'')+'</div>';
+  '<div class="notice '+(withSales.size<slots.size?'warn':'ok')+'">📶 Jualan dimasukkan: '+withSales.size+'/'+slots.size+' slot bulan ini. '+(withSales.size<slots.size?'Slot tanpa jualan dikira pada kadar asas RM'+S.baseRate.toFixed(0)+'/jam — pastikan semua jualan dimasukkan sebelum jana untuk ketepatan 100%.':'')+'</div>'+
+  '<div class="card glass"><h3>🎯 Bonus Kehadiran — Kawalan Manual Manager</h3>'+
+  '<div class="detailrow"><span>Status</span><b>'+(S.attBonusEnabled?'<span class="chip chip-ok">AKTIF — slip baharu termasuk bonus (jika layak)</span>':'<span class="chip chip-no">DIMATIKAN</span>')+'</b></div>'+
+  '<div class="detailrow"><span>Kadar</span><b>'+rm(S.attBonus)+' · maksimum sekali sebulan setiap staff</b></div>'+
+  '<button class="btn '+(S.attBonusEnabled?'btn-danger':'btn-ok')+' btn-big" onclick="toggleAttBonus()">'+(S.attBonusEnabled?'⏸ Matikan Bonus Kehadiran':'▶ Aktifkan Bonus Kehadiran')+'</button>'+
+  '<p class="hint">Aliran disyorkan: aktifkan pada <b>akhir bulan</b> → jana slip terakhir bulan → matikan semula. Hanya staff <b>hadir penuh + tiada tidak-hadir + tiada pertukaran syif</b> layak. Slip 2-mingguan hanya terima bonus pada slip Kitaran 2 — Kitaran 1 tidak pernah termasuk.</p></div>';
   if(monthly.length)html+='<div class="card glass"><h3>📅 Kumpulan Bulanan — 1 hingga '+dim+' ('+monthly.length+' staff)</h3>'+
     monthly.map(u=>{const p=slipFor(u.id,mk+'-01');return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div>'+(p?'<span class="chip chip-ok">RM '+p.total.toFixed(2)+'</span>':'<span class="chip chip-wait">Belum dijana</span>')+'</div>'}).join('')+
     '<button class="btn btn-primary btn-big" onclick="genPayslips(\'M\')">🧾 Jana Slip — Kitaran Bulanan</button></div>';
