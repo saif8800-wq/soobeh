@@ -841,7 +841,6 @@ async function toggleAttBonus(){
   await sync();render();
   toast(nv?'▶ Bonus kehadiran AKTIF untuk slip baharu 🎯':'⏸ Bonus kehadiran DIMATIKAN',nv?'ok':'info');
 }
-}
 
 function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   openModal('Tambah Akaun Baharu',
