@@ -50,6 +50,10 @@ textarea{resize:vertical}
 .portal h2{margin:8px 0 4px}
 .portal p{opacity:.75;font-size:15px;min-height:44px}
 .p-ic{font-size:44px}
+ .brandlogo{background:#fff;border:1px solid rgba(255,255,255,.3);border-radius:14px;padding:4px 10px;height:54px;display:flex;align-items:center;justify-content:center;flex:none}
+.brandlogo img{max-height:44px;max-width:170px;width:auto;height:auto;display:block}
+.brandlogo.big{height:112px;border-radius:22px;padding:8px 16px}
+.brandlogo.big img{max-height:94px;max-width:300px}
 .foot{opacity:.55;font-size:13px;margin-top:22px}
 .loginwrap{max-width:460px;margin:0 auto;padding:18px 16px 70px}
 .loginbox{padding:24px;margin-top:14px;text-align:center}
@@ -462,7 +466,7 @@ function payslipHTML(p){
   const S=DB.settings;
   const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+(s.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
   const line=(l,v)=>'<tr><td>'+l+'</td><td style="text-align:right">'+v+'</td></tr>';
-  return '<div class="payslip"><div class="ps-head"><div><h1>SOOBEH</h1><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
+  return '<div class="payslip"><div class="ps-head">'<div><img src="logo.png" style="height:36px;width:auto" alt="SOOBÉH"><br><small>Sistem Jadual Syif & Gaji</small></div><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
   '<div class="ps-grid"><div><b>Nama:</b> '+esc(p.staffName)+'</div><div><b>ID Pekerja:</b> '+esc(p.username)+'</div><div><b>Tempoh Kitaran:</b> '+fmtDateDS(p.start)+' – '+fmtDateDS(p.end)+'</div><div><b>Kitaran Bayaran:</b> '+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</div></div>'+
   '<table><tr><th>Butiran</th><th style="text-align:right">Jumlah (RM)</th></tr>'+
   line('Gaji Asas — '+p.hours+' jam × RM '+S.baseRate.toFixed(2)+'/jam',p.basePay.toFixed(2))+
@@ -1009,7 +1013,7 @@ async function doLogin(){
 /* ---------- 15. SKRIN UTAMA & LOG MASUK ---------- */
 function setupHTML(){return '<div class="loginwrap"><div class="loginbox glass"><div class="logo big">⚙️</div><h2>Tetapan Diperlukan</h2><p style="opacity:.8">Fail <b>config.js</b> belum dikonfigurasi.</p><ol style="text-align:left;opacity:.85"><li>Buka akaun Supabase anda → <b>Settings → API</b></li><li>Salin <b>Project URL</b> &amp; <b>anon public key</b></li><li>Tampal ke dalam <b>config.js</b></li><li>Muat naik semula ke GitHub — Vercel akan auto-deploy semula</li></ol></div></div>';}
 function landingHTML(){return '<div class="landing">'+
- '<div class="hero glass"><div class="logo big">S</div><h1>Soobeh TBG</h1>'+
+ '<div class="hero glass"><div class="brandlogo big"><img src="logo.png" alt="Soobeh TBG"></div><h1>Soobeh TBG</h1>'+
  '<p>Sistem Jadual Syif, Pertukaran Syif &amp; Pengiraan Gaji</p>'+
  '<div class="badges"><span class="chip chip-info">☁️ Supabase Database</span><span class="chip chip-info">🗓️ Kitaran 2 minggu</span><span class="chip chip-info">🔐 RLS + Auth berenkripsi</span><span class="chip chip-info">🧾 Slip gaji PDF</span></div></div>'+
  '<div class="portalgrid">'+
@@ -1018,7 +1022,7 @@ function landingHTML(){return '<div class="landing">'+
  '<p class="foot">Soobeh Shift &amp; Payroll System · Fasa 1 · Kitaran tempohan 2 minggu (Tempoh 1: 1–15 · Tempoh 2: 16–akhir bulan)</p></div>';}
 function loginHTML(){const st=ROUTE.portal==='staff';
  return '<div class="loginwrap"><button class="btn btn-sm ghost" onclick="goBackLanding()">← Kembali</button>'+
- '<div class="loginbox glass"><div class="logo big">'+(st?'👷':'👔')+'</div><h2>'+(st?'Portal Staff':'Portal Manager / Admin')+'</h2>'+
+ '<div class="loginbox glass"><div class="brandlogo big"><img src="logo.png" alt="Soobeh"></div><h2>'+(st?'Portal Staff':'Portal Manager / Admin')+'</h2>'+
  '<label class="field" style="text-align:left"><span>ID Pekerja / Username</span><input id="loginUser" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="cth: '+(st?'ali01':'aida05')+'"></label>'+
  '<div class="field" style="text-align:left"><span>PIN (4–6 digit)</span><div class="pin-dots" id="pinDots"></div></div>'+
  '<div class="keypad">'+[1,2,3,4,5,6,7,8,9].map(n=>'<button class="key" onclick="keyPress(\''+n+'\')">'+n+'</button>').join('')+
@@ -1034,7 +1038,7 @@ function renderStaffShell(){
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
   if(!tabs.some(t=>t.k===ROUTE.tab))ROUTE.tab='cal';
   $('#app').innerHTML=
-  '<header class="appbar glass"><div class="brand"><div class="logo">S</div><div><b>Soobeh</b><small>'+esc(u.name)+'</small></div></div>'+
+  '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>'+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<main class="wrap"><div id="viewRoot"></div></main>'+
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
@@ -1227,7 +1231,7 @@ function renderManagerShell(){
   const tabs=MTABS.slice();if(u.role==='admin')tabs.push({k:'tetap',ic:'⚙️',lb:'Tetapan'},{k:'log',ic:'📜',lb:'Log'});
   if(!tabs.some(t=>t.k===ROUTE.mtab))ROUTE.mtab='dash';
   $('#app').innerHTML=
-  '<header class="appbar glass"><div class="brand"><div class="logo">M</div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
+  '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
   ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,gaji:renderMPayroll,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
