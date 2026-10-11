@@ -301,7 +301,7 @@ async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — c
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
-function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null}}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
@@ -1295,9 +1295,106 @@ function renderStaffProfile(){
   '<p class="hint">PIN disimpan sebagai hash bcrypt di server Supabase Auth — bukan teks biasa.</p></div>'+
   '<button class="btn btn-danger btn-big" onclick="logout()">⏻ Log Keluar</button>';
 }
-
+/* ---------- 16b. LAPORAN: PUNCH CARD & JUALAN (Manager) ---------- */
+function setReportStaff(id){ROUTE.lrStaff=id;render()}
+function lrNav(d){ROUTE.lrmk=shiftMonth(ROUTE.lrmk||monthKey(todayStr()),d);render()}
+function reportRows(staffId,mk){
+  return scheduledEntries(staffId,mk).slice().sort((a,b)=>a.date.localeCompare(b.date));
+}
+function reportSummary(staffId,mk){
+  const rows=reportRows(staffId,mk);
+  let ts=0,th=0,pn=0,ln=0;
+  rows.forEach(e=>{
+    const a=DB.attendance.find(x=>x.staffId===staffId&&x.date===e.date&&x.shift===e.shift);
+    const sale=getSale(e.date,e.shift),h=hrsOf(e);
+    if(!e.noShow){th+=h;if(sale!=null)ts+=sale}
+    if(a&&a.punchIn)pn++;
+    if(a&&a.late)ln++;
+  });
+  return {n:rows.length,h:Math.round(th*10)/10,ts:ts,pn:pn,ln:ln};
+}
+function renderMReport(){
+  const me=reqMgr();if(!me)return;
+  if(!ROUTE.lrmk)ROUTE.lrmk=monthKey(todayStr());
+  const mk=ROUTE.lrmk;
+  const staff=DB.users.filter(x=>x.role==='staff'&&x.active!==false);
+  let html='<div class="pagehead"><h2>📈 Laporan Punch Card &amp; Jualan</h2><div class="monthnav glass"><button onclick="lrNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="lrNav(1)">▶</button></div></div>';
+  if(!staff.length){$('#viewRoot').innerHTML=html+'<div class="notice warn">Tiada staff aktif.</div>';return}
+  if(!ROUTE.lrStaff||!staff.some(s=>s.id===ROUTE.lrStaff))ROUTE.lrStaff=staff[0].id;
+  const sel=DB.users.find(u=>u.id===ROUTE.lrStaff);
+  const rows=reportRows(ROUTE.lrStaff,mk);
+  const sum=reportSummary(ROUTE.lrStaff,mk);
+  html+='<div class="card glass"><h3>👤 Laporan Individu — pilih staf</h3>'+
+  '<label class="field"><span>Nama staf</span><select onchange="setReportStaff(this.value)">'+staff.map(s=>'<option value="'+s.id+'"'+(s.id===ROUTE.lrStaff?' selected':'')+'>'+esc(s.name)+' ('+esc(s.username)+')</option>').join('')+'</select></label>';
+  if(!rows.length)html+='<p style="opacity:.7">Tiada syif '+esc(sel.name)+' pada '+monthLabel(mk)+'.</p>';
+  else{
+    html+='<div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Punch In</th><th>Punch Out</th><th style="text-align:right">Jualan</th></tr>';
+    rows.forEach(e=>{
+      const a=DB.attendance.find(x=>x.staffId===ROUTE.lrStaff&&x.date===e.date&&x.shift===e.shift);
+      const sale=getSale(e.date,e.shift);
+      html+='<tr><td>'+dShort(e.date)+'</td><td>'+(e.shift==='morning'?'☀ Pagi':'🌙 Petang')+(e.hours!=null?' <span class="chip">'+e.hours+'j</span>':'')+'</td>'+
+      '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?' <span class="chip chip-warn">LAMBAT</span>':''):(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'<span class="chip chip-wait">tiada punch</span>'))+'</td>'+
+      '<td>'+(a&&a.punchOut?fmtT(a.punchOut):'—')+'</td>'+
+      '<td style="text-align:right">'+(sale!=null?rm2(sale):'—')+'</td></tr>';
+    });
+    html+='</table></div>'+
+    '<div class="statrow">'+
+    '<div class="stat"><small>Total syif</small><b>'+sum.n+'</b></div>'+
+    '<div class="stat"><small>Total jam</small><b>'+sum.h+'</b></div>'+
+    '<div class="stat"><small>Punch in</small><b>'+sum.pn+(sum.ln?' <small style="color:#fde68a">('+sum.ln+' lambat)</small>':'')+'</b></div>'+
+    '<div class="stat"><small>TOTAL JUALAN SEBULAN</small><b>'+rm(sum.ts)+'</b></div></div>';
+  }
+  html+='<button class="btn btn-primary btn-big" onclick="exportStaffReportPDF()">⬇ Export PDF — Staf Ini</button>'+
+  '<p class="hint">Jualan sebulan = jumlah jualan semua syif yang staf ini bekerja (bukan jualan keseluruhan kiosk) — asas kelayakan Bonus Prestasi RM'+DB.settings.perfBonus+'.</p></div>';
+  const all=staff.map(s=>({s:s,r:reportSummary(s.id,mk)}));
+  html+='<div class="card glass"><h3>👥 Ringkasan Semua Staf — '+monthLabel(mk)+'</h3>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Staf</th><th>Syif</th><th>Jam</th><th>Punch</th><th>Lambat</th><th style="text-align:right">Jualan Sebulan</th></tr>'+
+  all.map(x=>'<tr><td>'+esc(x.s.name)+'</td><td>'+x.r.n+'</td><td>'+x.r.h+'</td><td>'+x.r.pn+'</td><td>'+(x.r.ln?'<span class="chip chip-warn">'+x.r.ln+'</span>':'<span class="chip chip-ok">0</span>')+'</td><td style="text-align:right"><b>'+rm2(x.r.ts)+'</b></td></tr>').join('')+
+  '</table></div>'+
+  '<button class="btn btn-ok btn-big" onclick="exportAllReportPDF()">⬇ Export PDF — Semua Staf</button>'+
+  '<p class="hint">Laporan untuk rekod bulanan &amp; semakan kelayakan Bonus Kehadiran (lambat = tidak layak).</p></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function exportStaffReportPDF(){
+  const mk=ROUTE.lrmk||monthKey(todayStr());
+  const sel=DB.users.find(u=>u.id===ROUTE.lrStaff);
+  if(!sel)return toast('Pilih staf dahulu','err');
+  const rows=reportRows(sel.id,mk);
+  const sum=reportSummary(sel.id,mk);
+  const trs=rows.map(e=>{
+    const a=DB.attendance.find(x=>x.staffId===sel.id&&x.date===e.date&&x.shift===e.shift);
+    const sale=getSale(e.date,e.shift);
+    return '<tr><td>'+dShort(e.date)+'</td><td>'+(e.shift==='morning'?'Pagi':'Petang')+'</td>'+
+    '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?' (LAMBAT)':''):(e.noShow?'Tidak Hadir':'—'))+'</td>'+
+    '<td>'+(a&&a.punchOut?fmtT(a.punchOut):'—')+'</td>'+
+    '<td style="text-align:right">'+(sale!=null?'RM '+sale.toFixed(2):'—')+'</td></tr>';
+  }).join('');
+  $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
+  '<div class="ps-head"><div><h1>LAPORAN PUNCH CARD</h1><small>Soobeh TBG · '+monthLabel(mk)+'</small></div><div style="text-align:right"><b>'+esc(sel.name)+'</b><br><small>ID: '+esc(sel.username)+'</small><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
+  '<table><tr><th>Tarikh</th><th>Syif</th><th>Punch In</th><th>Punch Out</th><th style="text-align:right">Jualan Syif</th></tr>'+
+  (trs||'<tr><td colspan="5">Tiada rekod</td></tr>')+'</table>'+
+  '<div class="ps-total"><span>TOTAL JUALAN SEBULAN · '+sum.n+' syif · '+sum.h+' jam · '+sum.pn+' punch'+(sum.ln?' · '+sum.ln+' LAMBAT':'')+'</span><span>RM '+sum.ts.toFixed(2)+'</span></div>'+
+  '<p class="ps-note">Jualan sebulan = jumlah jualan syif yang dilakukan oleh staf ini (asas kelayakan Bonus Prestasi). Laporan dijana automatik oleh Sistem Soobeh TBG dan bukan bukti transaksi bank.</p></div>';
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);
+}
+function exportAllReportPDF(){
+  const mk=ROUTE.lrmk||monthKey(todayStr());
+  const staff=DB.users.filter(x=>x.role==='staff'&&x.active!==false);
+  if(!staff.length)return toast('Tiada staff aktif','err');
+  const trs=staff.map(s=>{
+    const r=reportSummary(s.id,mk);
+    return '<tr><td>'+esc(s.name)+' ('+esc(s.username)+')</td><td style="text-align:center">'+r.n+'</td><td style="text-align:center">'+r.h+'</td><td style="text-align:center">'+r.pn+'</td><td style="text-align:center">'+(r.ln||0)+'</td><td style="text-align:right">RM '+r.ts.toFixed(2)+'</td></tr>';
+  }).join('');
+  $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
+  '<div class="ps-head"><div><h1>LAPORAN KEHADIRAN &amp; JUALAN</h1><small>Soobeh TBG · Semua Staf</small></div><div style="text-align:right"><b>'+monthLabel(mk)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
+  '<table><tr><th>Staf</th><th>Syif</th><th>Jam</th><th>Punch In</th><th>Lambat</th><th style="text-align:right">Jualan Sebulan</th></tr>'+trs+'</table>'+
+  '<p class="ps-note">Lambat = punch in selepas waktu syif bermula — hilang kelayakan Bonus Kehadiran bulan berkenaan. Laporan dijana automatik oleh Sistem Soobeh TBG.</p></div>';
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);
+}
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'staf',ic:'👥',lb:'Staf'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -1314,7 +1411,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,gaji:renderMPayroll,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,gaji:renderMPayroll,laporan:renderMReport,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
