@@ -241,7 +241,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -284,6 +284,8 @@ async function loadAll(){
   DB.deductions=(dd.data||[]).map(r=>({id:r.id,staffId:r.staff_id,periodStart:r.period_start,amount:+r.amount,reason:r.reason||'',t:Date.parse(r.created_at)}));
   const att=await SB.from('attendance').select('*').order('date',{ascending:false}).limit(500);
   DB.attendance=(att.data||[]).map(r=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,punchIn:r.punch_in?Date.parse(r.punch_in):null,punchOut:r.punch_out?Date.parse(r.punch_out):null,late:!!r.late,dist:r.pin_dist!=null?+r.pin_dist:null}));
+  const tk=await SB.from('tasks').select('*').order('date',{ascending:false}).limit(400);
+  DB.tasks=(tk.data||[]).map(r=>({id:r.id,date:r.date,shift:r.shift,template:r.template,note:r.note||'',status:r.status,data:r.data||null,submittedBy:r.submitted_by,submittedAt:r.submitted_at?Date.parse(r.submitted_at):null,late:!!r.late_submit,ackedAt:r.acked_at?Date.parse(r.acked_at):null,t:Date.parse(r.created_at)}));
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
 }
 async function sync(){await loadAll()}
@@ -301,7 +303,7 @@ async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — c
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
-function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null}}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
@@ -1112,7 +1114,7 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
-const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'hadir',ic:'📍',lb:'Hadir'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'hadir',ic:'📍',lb:'Hadir'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
 function renderStaffShell(){
   const u=currentUser();
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
@@ -1122,7 +1124,7 @@ function renderStaffShell(){
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<main class="wrap"><div id="viewRoot"></div></main>'+
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
-  ({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
+({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tugasan:renderStaffTasks,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
 }
 function slotPill(ds,shift,pub,locked){
   const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
@@ -1393,8 +1395,212 @@ function exportAllReportPDF(){
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
+ /* ---------- 16c. TUGASAN SYIF: TEMPLATE + ASSIGN + SELESAI + LAPORAN ---------- */
+const TASK_TEMPLATES=[
+ {id:'stock',ic:'📦',t:'Update Stock Inventory Penuh (Stock Tail)',
+  items:['Kemaskini senarai dalam Google Sheet','Maklumkan stock yang perlu dibeli','Semak tarikh luput & stok hampir habis'],
+  inputs:[{k:'beli',lb:'Senarai stock yang perlu dibeli',ph:'cth: ayam 5 box, sos 2 botol'}]},
+ {id:'rak',ic:'🧺',t:'Bersihkan Rak & Ruang Simpanan',items:['Susun semula packaging dan bahan']},
+ {id:'media',ic:'📱',t:'Kemaskini Media Sosial',items:['Buat pos/content di TikTok SooBEH','Comment / Like / Share','Google review'],
+  inputs:[{k:'pos',lb:'Ringkasan pos/content dibuat',ph:'cth: 1 video TikTok reheat ayam'}]},
+ {id:'fridge',ic:'❄️',t:'Kebersihan Peti Sejuk & Freezer',items:['Defrost','Susun stock ayam FIFO','Bersihkan peti sejuk','Check tarikh luput barang dalam peti sejuk']},
+ {id:'flavor',ic:'🥤',t:'Flavor',items:['Isi flavor dalam piping bag','Report dalam group bilangan flavor dibagkan','Bersihkan tong flavor'],
+  inputs:[{k:'flavor',lb:'Bilangan flavor dibagkan',ph:'cth: 120',type:'number'}]},
+ {id:'cleaning',ic:'🧽',t:'Total Cleaning',items:['Pembersihan menyeluruh kawasan kiosk','Dinding dimopkan','Sawang dibuang']},
+ {id:'grease',ic:'🪣',t:'Grease Trap',items:['Sauk jelly','Ceduk air sampai kering','Bersihkan pakai berus','Lap pakai kain','Buang sisa dalam plastik sampah']}
+];
+function tplOf(k){return TASK_TEMPLATES.find(x=>x.id===k)}
+const TASK_ST={assigned:['Belum Selesai','chip-wait'],submitted:['Dihantar','chip-info'],done:['Selesai ✔','chip-ok']};
+function staffOnShift(ds,sh){
+  const ids=new Set();
+  DB.schedule.forEach(e=>{if(e.date===ds&&e.shift===sh)ids.add(e.staffId)});
+  DB.bookings.forEach(b=>{if(b.date===ds&&b.shift===sh&&b.status==='approved')ids.add(b.staffId)});
+  return [...ids];
+}
+function myShiftsOn(ds){
+  const s=new Set();
+  DB.schedule.forEach(e=>{if(e.staffId===ME.id&&e.date===ds)s.add(e.shift)});
+  DB.bookings.forEach(b=>{if(b.staffId===ME.id&&b.date===ds&&b.status==='approved')s.add(b.shift)});
+  return [...s];
+}
+function ltNav(d){ROUTE.ltmk=shiftMonth(ROUTE.ltmk||monthKey(todayStr()),d);render()}
+/* --- VIEW STAF --- */
+function renderStaffTasks(){
+  const u=currentUser();
+  const t=todayStr(),my=myShiftsOn(t);
+  const today=DB.tasks.filter(x=>x.date===t&&my.includes(x.shift));
+  let html='<div class="pagehead"><h2>📋 Tugasan Saya</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(ROUTE.ltmk||monthKey(t))+'</b><button onclick="ltNav(1)">▶</button></div></div>';
+  if(!my.length)html+='<div class="notice info">Tiada syif anda hari ini — tugasan hanya muncul pada hari anda bertugas. Belum tempah? <b><a href="#" onclick="openGuide(\'tempah\');return false" style="color:#c7d2fe">Baca panduan 📖</a></b></div>';
+  else if(!today.length)html+='<div class="notice ok">✔ Tiada tugasan untuk syif anda hari ini.</div>';
+  today.forEach(x=>{
+    const tp=tplOf(x.template)||{ic:'📋',t:x.template};
+    const st=TASK_ST[x.status];
+    let act='';
+    if(x.status==='assigned')act='<button class="btn btn-primary btn-big" onclick="openTaskModal(\''+x.id+'\')">▶ Buka &amp; Selesaikan</button>';
+    else if(x.status==='submitted')act='<div class="notice info">⏳ Dihantar '+fmtT(x.submittedAt)+(x.late?' <span class="chip chip-warn">LEWAT</span>':'')+' — menunggu pengakuan (acknowledge) manager.</div>';
+    else act='<div class="notice ok">✅ Diakui manager '+fmtT(x.ackedAt)+' — selesai!</div>';
+    html+='<div class="card glass"><div class="brow" style="border:0"><div><b>'+tp.ic+' '+esc(tp.t)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span><span class="chip '+st[1]+'">'+st[0]+'</span></div></div></div>'+
+    (x.note?'<div class="detailrow"><span>Arahan manager</span><b>'+esc(x.note)+'</b></div>':'')+act+'</div>';
+  });
+  if(today.some(x=>x.status==='assigned'))html+='<div class="notice warn">⚡ Selesaikan tugasan <b>SEBELUM syif tamat</b> (Pagi: 4:00 petang · Petang: 10:00 malam) — hantar lewat akan ditanda LEWAT.</div>';
+  html+=taskReportHTML(u.id);
+  $('#viewRoot').innerHTML=html;
+}
+function openTaskModal(id){
+  const x=DB.tasks.find(t=>t.id===id);if(!x)return;
+  const tp=tplOf(x.template)||{ic:'📋',t:x.template,items:[]};
+  const st=TASK_ST[x.status];
+  let body='<div class="detailrow"><span>Tarikh &amp; syif</span><b>'+dShort(x.date)+' · '+(x.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</b></div>'+
+  '<div class="detailrow"><span>Status</span><b><span class="chip '+st[1]+'">'+st[0]+'</span></b></div>'+
+  (x.note?'<div class="detailrow"><span>Arahan manager</span><b>'+esc(x.note)+'</b></div>':'');
+  const d=(x.data&&x.data.items)||null;
+  if(x.status==='assigned'&&ME.role==='staff'){
+    body+='<h3 style="margin-top:12px">Tandakan setiap langkah yang telah dibuat:</h3>'+
+    tp.items.map((it,i)=>'<label class="chk"><input type="checkbox" id="tk_'+i+'"> '+esc(it)+'</label>').join('')+
+    ((tp.inputs&&tp.inputs.length)?'<h3 style="margin-top:12px">Laporan (wajib diisi):</h3>'+tp.inputs.map(f=>'<label class="field"><span>'+esc(f.lb)+'</span><input id="tf_'+f.k+'" '+(f.type==='number'?'type="number" min="0"':'type="text"')+' placeholder="'+esc(f.ph||'')+'"></label>').join(''):'')+
+    '<div class="notice warn">Pastikan SEMUA langkah ditanda &amp; laporan diisi sebelum hantar.</div>'+
+    '<button class="btn btn-ok btn-big" onclick="submitTask(\''+x.id+'\')">✅ Tandakan Selesai &amp; Hantar kepada Manager</button>';
+  }else{
+    body+='<h3 style="margin-top:12px">Langkah tugasan:</h3>'+tp.items.map((it,i)=>'<div class="detailrow"><span>'+esc(it)+'</span><b>'+(d&&d[i]?'✔':'—')+'</b></div>').join('');
+    const dd=x.data||{};
+    if(tp.inputs&&tp.inputs.length)body+='<h3 style="margin-top:12px">Laporan staf:</h3>'+tp.inputs.map(f=>'<div class="detailrow"><span>'+esc(f.lb)+'</span><b>'+esc(dd[f.k]||'—')+'</b></div>').join('');
+    body+='<div class="detailrow"><span>Dihantar oleh</span><b>'+(x.submittedBy?esc((DB.users.find(u=>u.id===x.submittedBy)||{}).name||usernameOf(x.submittedBy)||'—'):'—')+'</b></div>'+
+    '<div class="detailrow"><span>Masa hantar</span><b>'+(x.submittedAt?fmtT(x.submittedAt)+(x.late?' <span class="chip chip-warn">LEWAT</span>':''):'—')+'</b></div>'+
+    (x.ackedAt?'<div class="detailrow"><span>Diakui manager</span><b>'+fmtT(x.ackedAt)+'</b></div>':'');
+  }
+  openModal(tp.ic+' '+esc(tp.t),body);
+}
+async function submitTask(id){
+  const x=DB.tasks.find(t=>t.id===id);if(!x)return;
+  const tp=tplOf(x.template);if(!tp)return;
+  const items=tp.items.map((_,i)=>(($('#tk_'+i)||{}).checked));
+  if(items.some(v=>!v))return toast('Tanda SEMUA langkah dahulu ✋','err');
+  let bad=false;(tp.inputs||[]).forEach(f=>{const el=$('#tf_'+f.k);if(el&&!el.value.trim())bad=true});
+  if(bad)return toast('Isi semua laporan yang dikehendaki','err');
+  const data={items:items};
+  (tp.inputs||[]).forEach(f=>{const el=$('#tf_'+f.k);if(el)data[f.k]=el.value.trim()});
+  const {error}=await SB.rpc('submit_task',{p_id:id,p_data:data});
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();toast('Tugasan dihantar kepada manager ✔','ok');
+}
+/* --- VIEW MANAGER --- */
+function renderMTasks(){
+  const me=reqMgr();if(!me)return;
+  if(!ROUTE.ltmk)ROUTE.ltmk=monthKey(todayStr());
+  const mk=ROUTE.ltmk;
+  let html='<div class="pagehead"><h2>📋 Tugasan Staf</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="ltNav(1)">▶</button></div></div>';
+  html+='<div class="card glass"><h3>✚ Assign Tugasan <small>(maksimum 2 setiap syif)</small></h3>'+
+  '<div class="formgrid">'+
+  '<label class="field"><span>Tarikh</span><input type="date" id="atDate" value="'+todayStr()+'" min="'+todayStr()+'" max="'+ymd(new Date(Date.now()+62*864e5))+'"></label>'+
+  '<label class="field"><span>Syif</span><select id="atShift"><option value="morning">☀ Pagi (10:00–16:00)</option><option value="evening">🌙 Petang (16:00–22:00)</option></select></label>'+
+  '<label class="field"><span>Tugasan</span><select id="atTpl">'+TASK_TEMPLATES.map(t=>'<option value="'+t.id+'">'+t.ic+' '+esc(t.t)+'</option>').join('')+'</select></label>'+
+  '<label class="field"><span>Arahan tambahan (opsyenal)</span><input id="atNote" placeholder="cth: fokus freezer dulu"></label></div>'+
+  '<button class="btn btn-primary btn-big" onclick="assignTaskSubmit()">✚ Beri Tugasan kepada Staf Syif Ini</button>'+
+  '<p class="hint">Tugasan muncul kepada <b>semua staf yang bertugas</b> pada syif &amp; tarikh tersebut. Staf mesti selesaikan sebelum syif tamat — setiap penghantaran perlu anda <b>acknowledge</b>.</p></div>';
+  const list=DB.tasks.filter(x=>monthKey(x.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!list.length)html+='<div class="card glass"><p style="opacity:.7">Tiada tugasan pada '+monthLabel(mk)+'.</p></div>';
+  list.forEach(x=>{
+    const tp=tplOf(x.template)||{ic:'📋',t:x.template};
+    const st=TASK_ST[x.status];
+    const sub=x.submittedBy?((DB.users.find(u=>u.id===x.submittedBy)||{}).name||'?'):null;
+    let act='<button class="btn btn-sm" onclick="openTaskModal(\''+x.id+'\')" title="Lihat butiran">👁</button>';
+    if(x.status==='submitted')act+='<button class="btn btn-sm btn-ok" onclick="ackTask(\''+x.id+'\')">✔ Acknowledge</button>';
+    if(x.status==='assigned')act+='<button class="btn btn-sm btn-danger" onclick="delTask(\''+x.id+'\')" title="Buang">🗑</button>';
+    html+='<div class="card glass"><div class="brow"><div><b>'+tp.ic+' '+esc(tp.t)+'</b><div class="chips" style="margin-top:5px">'+
+    '<span class="chip chip-info">'+dShort(x.date)+' · '+(x.shift==='morning'?'Pagi':'Petang')+'</span>'+
+    '<span class="chip '+st[1]+'">'+st[0]+(x.late?' ⚠LEWAT':'')+'</span>'+
+    (sub?'<span class="chip">oleh '+esc(sub)+'</span>':'')+
+    '<span class="chip">'+staffOnShift(x.date,x.shift).length+' staf syif ini</span></div>'+
+    (x.note?'<small style="opacity:.7;display:block;margin-top:4px">📝 '+esc(x.note)+'</small>':'')+'</div>'+
+    '<div class="brow-act">'+act+'</div></div></div>';
+  });
+  html+=taskReportHTML(null);
+  $('#viewRoot').innerHTML=html;
+}
+async function assignTaskSubmit(){
+  const me=reqMgr();if(!me)return;
+  const date=$('#atDate').value,shift=$('#atShift').value,tpl=$('#atTpl').value,note=($('#atNote')||{}).value||'';
+  if(!date||!shift||!tpl)return toast('Lengkapkan tarikh, syif & tugasan','err');
+  if(date<todayStr())return toast('Tarikh lampau tidak dibenarkan','err');
+  const cnt=DB.tasks.filter(x=>x.date===date&&x.shift===shift).length;
+  if(cnt>=2)return toast('Sudah '+cnt+' tugasan pada syif ini — maksimum 2','err');
+  const n=staffOnShift(date,shift).length;
+  if(!n&&!confirm('AMARAN: Tiada staf lagi dijadualkan pada syif ini.\n\nTugasan akan muncul apabila staf ditugaskan/ditempah. Teruskan?'))return;
+  const {error}=await SB.rpc('assign_task',{p_date:date,p_shift:shift,p_template:tpl,p_note:note.trim()});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Tugasan diberikan kepada staf syif tersebut ✔','ok');
+}
+async function ackTask(id){
+  const me=reqMgr();if(!me)return;
+  const x=DB.tasks.find(t=>t.id===id);
+  if(!x||x.status!=='submitted')return toast('Tugasan ini belum dihantar oleh staf','err');
+  const tp=tplOf(x.template);
+  if(!confirm('Acknowledge (sahkan) tugasan "'+(tp?tp.t:x.template)+'" sebagai SELESAI?\n\nStaf akan dimaklumkan.'))return;
+  const {error}=await SB.rpc('ack_task',{p_id:id});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Tugasan diakui & ditanda selesai ✔','ok');
+}
+async function delTask(id){
+  const me=reqMgr();if(!me)return;
+  const x=DB.tasks.find(t=>t.id===id);if(!x)return;
+  if(x.status!=='assigned')return toast('Hanya tugasan BELUM dihantar boleh dibuang','err');
+  const tp=tplOf(x.template);
+  if(!confirm('Buang tugasan "'+(tp?tp.t:x.template)+'" ('+dShort(x.date)+')?'))return;
+  const {error}=await SB.from('tasks').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('task_delete',(tp?tp.t:x.template)+' · '+dShort(x.date));
+  await sync();render();toast('Tugasan dibuang','ok');
+}
+/* --- LAPORAN (staf & manager) --- */
+function taskReportHTML(staffId){
+  const mk=ROUTE.ltmk||monthKey(todayStr());
+  let list=DB.tasks.filter(x=>monthKey(x.date)===mk);
+  if(staffId){
+    const mine=new Set();
+    DB.schedule.forEach(e=>{if(e.staffId===staffId)mine.add(e.date+'|'+e.shift)});
+    DB.bookings.forEach(b=>{if(b.staffId===staffId&&b.status==='approved')mine.add(b.date+'|'+b.shift)});
+    list=list.filter(x=>mine.has(x.date+'|'+x.shift));
+  }
+  list.sort((a,b)=>b.date.localeCompare(a.date));
+  const rows=list.map(x=>{
+    const tp=tplOf(x.template)||{t:x.template};
+    const st=TASK_ST[x.status];
+    return '<tr><td>'+dShort(x.date)+'</td><td>'+(x.shift==='morning'?'Pagi':'Petang')+'</td><td>'+esc(tp.t)+'</td>'+
+    '<td><span class="chip '+st[1]+'">'+st[0]+(x.late?' ⚠':'')+'</span></td>'+
+    '<td>'+(x.submittedAt?fmtT(x.submittedAt):'—')+'</td></tr>';
+  }).join('');
+  return '<div class="card glass"><h3>📜 Laporan Tugasan — '+monthLabel(mk)+' ('+list.length+')</h3>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Nama Tugasan</th><th>Status</th><th>Masa Completion</th></tr>'+
+  (rows||'<tr><td colspan="5">Tiada rekod</td></tr>')+'</table></div>'+
+  '<button class="btn btn-primary btn-big" onclick="exportTaskReportPDF('+(staffId?'\''+staffId+'\'':'null')+')">⬇ Export PDF Laporan Tugasan</button>'+
+  '<p class="hint">Masa Completion = masa staf menghantar (tandakan selesai). LEWAT = dihantar selepas syif tamat.</p></div>';
+}
+function exportTaskReportPDF(staffId){
+  const mk=ROUTE.ltmk||monthKey(todayStr());
+  let list=DB.tasks.filter(x=>monthKey(x.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
+  let who='Semua Staf';
+  if(staffId){
+    const mine=new Set();
+    DB.schedule.forEach(e=>{if(e.staffId===staffId)mine.add(e.date+'|'+e.shift)});
+    DB.bookings.forEach(b=>{if(b.staffId===staffId&&b.status==='approved')mine.add(b.date+'|'+b.shift)});
+    list=list.filter(x=>mine.has(x.date+'|'+x.shift));
+    const u=DB.users.find(x=>x.id===staffId);if(u)who=u.name;
+  }
+  const rows=list.map(x=>{
+    const tp=tplOf(x.template)||{t:x.template};
+    const st=(x.status==='done')?'Selesai':(x.status==='submitted')?'Dihantar':'Belum Selesai';
+    return '<tr><td>'+dShort(x.date)+'</td><td>'+(x.shift==='morning'?'Pagi':'Petang')+'</td><td>'+esc(tp.t)+'</td><td>'+st+(x.late?' (LEWAT)':'')+'</td><td>'+(x.submittedAt?fmtT(x.submittedAt):'—')+'</td></tr>';
+  }).join('');
+  $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
+  '<div class="ps-head"><div><h1>LAPORAN TUGASAN</h1><small>Soobeh TBG · '+monthLabel(mk)+'</small></div><div style="text-align:right"><b>'+esc(who)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
+  '<table><tr><th>Tarikh</th><th>Syif</th><th>Nama Tugasan</th><th>Status</th><th>Masa Completion</th></tr>'+
+  (rows||'<tr><td colspan="5">Tiada rekod</td></tr>')+'</table>'+
+  '<p class="ps-note">LEWAT = dihantar selepas syif tamat. Laporan dijana automatik oleh Sistem Soobeh TBG.</p></div>';
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);
+}
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'staf',ic:'👥',lb:'Staf'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -1411,7 +1617,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,gaji:renderMPayroll,laporan:renderMReport,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
