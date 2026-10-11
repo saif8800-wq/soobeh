@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panduan Staf — Sistem Soobeh TBG</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;font-size:15px;line-height:1.65;background:#f5f5f5}
+.page{max-width:800px;margin:0 auto;background:#fff;padding:50px 56px;box-shadow:0 0 10px rgba(0,0,0,.1)}
+.cover{text-align:center;padding:70px 0 40px;page-break-after:always}
+.cover img{max-width:260px;margin-bottom:24px}
+.cover h1{font-size:30px;margin:10px 0;color:#c62828}
+.cover h2{font-size:20px;font-weight:normal;color:#444;margin:4px 0 30px}
+.cover .box{background:#fff3f0;border:2px solid #c62828;border-radius:14px;padding:18px;max-width:420px;margin:30px auto;font-size:16px}
+h2.sec{font-size:22px;color:#c62828;border-bottom:3px solid #c62828;padding-bottom:6px;margin-top:36px;page-break-after:avoid}
+h3{font-size:17px;margin:22px 0 8px;page-break-after:avoid}
+.step{display:flex;gap:14px;margin:14px 0;page-break-inside:avoid}
+.no{flex:none;width:34px;height:34px;border-radius:50%;background:#c62828;color:#fff;font-weight:bold;display:flex;align-items:center;justify-content:center;font-size:17px}
+.do{font-weight:bold}
+.see{background:#e8f5e9;border-left:4px solid #2e7d32;padding:8px 12px;border-radius:6px;margin:6px 0 12px;font-size:14px}
+.warn{background:#fff8e1;border-left:4px solid #f9a825;padding:10px 14px;border-radius:6px;margin:12px 0;font-size:14px}
+.tip{background:#e3f2fd;border-left:4px solid #1565c0;padding:10px 14px;border-radius:6px;margin:12px 0;font-size:14px}
+.btnm{display:inline-block;background:#6366f1;color:#fff;padding:8px 20px;border-radius:10px;font-weight:bold}
+.btng{background:#10b981}.btnr{background:#ef4444}
+.mock{border:2px solid #999;border-radius:12px;padding:14px;margin:14px 0;background:#fafafa;page-break-inside:avoid}
+.mock .t{font-size:12px;color:#888;text-align:center;margin-bottom:8px}
+.slotex{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.slotex div{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:bold;color:#fff}
+.sw{background:#fbbf24}.sg{background:#34d399}.skb{background:#94a3b8}.sbl{background:#60a5fa}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+th,td{border:1px solid #888;padding:8px 10px;text-align:left}
+th{background:#f0f0f0}
+kbd{background:#eee;border:1px solid #999;border-radius:4px;padding:2px 8px;font-family:inherit;font-weight:bold}
+.printbar{position:fixed;bottom:16px;right:16px;z-index:9}
+.printbar button{background:#c62828;color:#fff;border:none;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:bold;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.pb{page-break-before:always}
+ol.tight li{margin:6px 0}
+@media print{
+ body{background:#fff;font-size:13px}
+ .page{box-shadow:none;padding:10mm 12mm;max-width:none}
+ .printbar{display:none}
+ @page{size:A4;margin:12mm}
+ .pb{page-break-before:always}
+ .cover{page-break-after:always}
+}
+</style>
+</head>
+<body>
+<div class="printbar"><button onclick="window.print()">🖨️ CETAK / SIMPAN PDF</button></div>
+<div class="page">
+
+<!-- ============ MUKA DEPAN ============ -->
+<div class="cover">
+<img src="logo.png" alt="Soobeh TBG">
+<h1>PANDUAN PENGGUNAAN SISTEM</h1>
+<h2>Sistem Jadual Syif &amp; Gaji Soobeh TBG</h2>
+<h2>UNTUK STAF</h2>
+<div class="box">
+<b>Untuk staf baharu:</b><br>
+Anda hanya perlukan 3 benda:<br>
+✅ Telefon pintar (atau komputer)<br>
+✅ Internet / WiFi / data telefon<br>
+✅ ID Pekerja &amp; PIN anda<br><br>
+<span style="font-size:13px">(Manager akan berikan ID &amp; PIN anda pada hari pertama kerja)</span>
+</div>
+<p style="font-size:13px;color:#777;margin-top:40px">Versi 1.0 · Keluaran Soobeh TBG</p>
+</div>
+
+<!-- ============ 1. PENGENALAN ============ -->
+<h2 class="sec">BAHAGIAN 1: Apa itu Sistem ini?</h2>
+<p>Sistem ini digunakan untuk <b>semua urusan kerja anda di Soobeh TBG</b>:</p>
+<table>
+<tr><th>Anda boleh buat apa</th><th>Di mana</th></tr>
+<tr><td>Tempah tarikh &amp; syif kerja anda sendiri</td><td>Tab <b>📅 Kalendar</b></td></tr>
+<tr><td>Rekod kehadiran (punch in / punch out)</td><td>Tab <b>📍 Hadir</b></td></tr>
+<tr><td>Lihat jadual kerja anda</td><td>Tab <b>🗓️ Jadual</b></td></tr>
+<tr><td>Mohon tukar syif dengan rakan</td><td>Tab <b>🔄 Tukar</b></td></tr>
+<tr><td>Lihat &amp; muat turun slip gaji</td><td>Tab <b>🧾 Slip Gaji</b></td></tr>
+<tr><td>Tukar PIN anda sendiri</td><td>Tab <b>👤 Profil</b></td></tr>
+</table>
+<div class="tip"><b>💡 Jangan risau:</b> Sistem ini direka supaya MUDAH. Semua butang besar. Semua tulisan besar. Jika tersilap tekan, tiada apa yang rosak — anda boleh keluar dan masuk semula.</div>
+
+<h3>Waktu syif kedai (tetap setiap hari)</h3>
+<table>
+<tr><th>Syif</th><th>Masa</th><th>Tempoh</th></tr>
+<tr><td>☀️ Syif Pagi</td><td>10:00 pagi — 4:00 petang</td><td>6 jam</td></tr>
+<tr><td>🌙 Syif Petang</td><td>4:00 petang — 10:00 malam</td><td>6 jam</td></tr>
+</table>
+
+<!-- ============ 2. LOG MASUK ============ -->
+<h2 class="sec pb">BAHAGIAN 2: Cara Log Masuk (Masuk ke Sistem)</h2>
+
+<div class="step"><div class="no">1</div><div>
+<span class="do">Ambil telefon anda dan buka "Internet" di telefon.</span><br>
+Ikonnya biasanya berupa bulatan berwarna (Chrome) atau huruf "e" biru (Edge). Tekan ikon tersebut sekali dengan jari anda.
+<div class="see">✅ Anda akan nampak skrin untuk taip alamat laman web (ada bar panjang di atas).</div></div></div>
+
+<div class="step"><div class="no">2</div><div>
+<span class="do">Taip alamat sistem ini pada bar atas, kemudian tekan butang "GO" atau "Enter":</span><br>
+<span style="background:#eee;padding:4px 10px;border-radius:6px;font-weight:bold">TULIS URL SISTEM ANDA DI SINI</span><br>
+<span style="font-size:13px">(Manager akan tulis alamat sebenar di sini sebelum cetak. Contoh: soobeh-tbg.vercel.app)</span>
+<div class="see">✅ Anda akan nampak muka depan sistem dengan LOGO SOOBÉH dan dua kotak besar.</div></div></div>
+
+<div class="tip"><b>💡 Tip penting:</b> Simpan alamat ini supaya tak perlu taip setiap kali — tekan butang <b>⋮ (tiga titik)</b> di penjuru atas kanan Chrome → tekan <b>"Add to Home screen"</b> / <b>"Tambah ke skrin utama"</b>. Selepas itu, ikon Soobeh akan muncul di skrin utama telefon anda macam aplikasi biasa. Tekan sahaja ikon itu untuk masuk.</div>
+
+<div class="step"><div class="no">3</div><div>
+<span class="do">Tekan kotak besar bertulis "Portal Staff — Log Masuk →".</span>
+<div class="see">✅ Anda akan nampak skrin log masuk dengan papan kekunci NOMBOR BESAR (seperti mesin ATM).</div></div></div>
+
+<div class="step"><div class="no">4</div><div>
+<span class="do">Taip ID Pekerja anda pada kotak pertama.</span><br>
+Contoh: <b>ali01</b> atau <b>minah02</b>. Taip dengan huruf kecil semua. Jika tersilap, tekan kotak itu dan padam, kemudian taip semula.
+</div></div>
+
+<div class="step"><div class="no">5</div><div>
+<span class="do">Masukkan PIN anda menggunakan papan kekunci BESAR di skrin.</span><br>
+Contoh: tekan 1 → 2 → 3 → 4. Setiap kali anda tekan nombor, satu bulatan hitam akan bertambah di atas (macam titik •). PIN mestilah 4 hingga 6 nombor.
+<br>Jika tersilap tekan, tekan butang <b>C</b> untuk padam semua dan mula semula. Butang <b>⌫</b> memadam satu nombor sahaja.
+</div></div>
+
+<div class="step"><div class="no">6</div><div>
+<span class="do">Tekan butang ungu besar bertulis "🔐 Log Masuk".</span>
+<div class="see">✅ Jika betul: anda akan masuk dan nampak tulisan "Selamat datang" bersama nama anda, dan KALENDAR akan muncul.</div>
+<div class="warn">⚠️ Jika keluar tulisan merah "ID atau PIN salah" — semak ID anda, dan cuba PIN semula. Selepas 5 kali salah, sistem akan KUNCI selama 60 saat. Tunggu 1 minit, kemudian cuba lagi.</div>
+</div></div>
+
+<h3>Lupa PIN anda?</h3>
+<p><b>Jangan panik.</b> Tiada perlu emel atau apa-apa yang rumit. Cuma <b>maklumkan kepada Manager secara bersemuka atau WhatsApp</b>. Manager akan set semula PIN anda dalam sistem dalam masa beberapa minit. Selepas itu, log masuk dengan PIN baharu.</p>
+
+<!-- ============ 3. MENU BAWAH ============ -->
+<h2 class="sec pb">BAHAGIAN 3: Menu di Bawah Skrin</h2>
+<p>Selepas log masuk, anda akan nampak <b>bar menu di bahagian BAWAH skrin</b> (macaam bar aplikasi WhatsApp). Tekan setiap satu untuk buka fungsi berbeza:</p>
+<table>
+<tr><th>Menu</th><th>Fungsinya</th></tr>
+<tr><td>📅 <b>Kalendar</b></td><td>Tempah syif kerja anda — <b>INI YANG PALING PENTING</b>, buat ini lebih dulu setiap kali anda buka sistem</td></tr>
+<tr><td>📍 <b>Hadir</b></td><td>Punch in bila sampai kerja, punch out bila balik</td></tr>
+<tr><td>🗓️ <b>Jadual</b></td><td>Lihat tarikh kerja anda yang telah disahkan</td></tr>
+<tr><td>🔄 <b>Tukar</b></td><td>Mohon tukar syif dengan rakan</td></tr>
+<tr><td>🧾 <b>Slip Gaji</b></td><td>Lihat gaji anda &amp; muat turun slip</td></tr>
+<tr><td>👤 <b>Profil</b></td><td>Tukar PIN sendiri, log keluar</td></tr>
+</table>
+
+<!-- ============ 4. KALENDAR & TEMPAHAN ============ -->
+<h2 class="sec pb">BAHAGIAN 4: Cara Tempah Syif (PALING PENTING!)</h2>
+<div class="warn"><b>⚡ PERINGATAN:</b> Anda WAJIB tempah syif anda sendiri dalam sistem. Manager tidak akan panggil anda — jika anda tidak tempah, anda tidak akan ada jadual kerja!</div>
+
+<h3>Apa itu "Tempoh"?</h3>
+<p>Sistem membahagikan bulan kepada <b>2 tempoh</b>:</p>
+<table>
+<tr><th>Tempoh 1</th><td>Tarikh 1 hingga 15</td></tr>
+<tr><th>Tempoh 2</th><td>Tarikh 16 hingga hujung bulan</td></tr>
+</table>
+<p>Anda boleh menempah untuk <b>tempoh sekarang dan tempoh selepas itu sahaja</b>. Tempoh yang lebih jauh akan kelihatan KELABU (belum dibuka).</p>
+
+<h3>Warna pada kotak slot (sangat penting untuk diingat)</h3>
+<div class="slotex">
+<div class="sw">🟡 KUNING</div><div class="sg">🟢 HIJAU</div><div class="skb">⚪ KELABU</div><div class="sbl">🔵 BIRU</div>
+</div>
+<table>
+<tr><th>Warna</th><th>Maksudnya</th></tr>
+<tr><td>🟡 <b>Kuning</b></td><td>Tempahan anda <b>MENUNGGU KELULUSAN</b> manager — belum pasti lagi</td></tr>
+<tr><td>🟢 <b>Hijau</b></td><td>Tempahan anda <b>DISAHKAN</b> oleh manager — dah pasti, ini jadual anda!</td></tr>
+<tr><td>⚪ <b>Kelabu</b></td><td>Tempahan anda <b>TIDAK DIPILIH</b> oleh manager untuk tempoh itu</td></tr>
+<tr><td>🔵 <b>Biru</b></td><td>Slot itu sudah dipenuhi staff lain (angka menunjukkan bilangan)</td></tr>
+</table>
+<p>Setiap kotak hari menunjukkan 2 slot: <b>☀</b> (Pagi) dan <b>🌙</b> (Petang). Angka pada kotak = bilangan staff yang telah menempah slot itu. Hadnya 2 staff setiap syif.</p>
+
+<h3>Langkah-langkah menempah syif</h3>
+
+<div class="step"><div class="no">1</div><div>
+<span class="do">Log masuk (rujuk Bahagian 2). Kalendar akan terus muncul dahulu.</span>
+<div class="see">✅ Anda akan nampak kalendar bulan semasa dengan kotak-kotak tarikh.</div></div></div>
+
+<div class="step"><div class="no">2</div><div>
+<span class="do">Jika tempoh yang anda nak tiada pada skrin, tekan butang <b>▶ (anak panah kanan)</b> di sebelah tulisan "Tempoh" di atas.</span>
+Tekan sekali untuk pergi ke tempoh seterusnya. Tekan <b>◀</b> untuk balik.
+</div></div>
+
+<div class="step"><div class="no">3</div><div>
+<span class="do">Cari hari yang anda mahu bekerja, kemudian TEKAN kotak kecil <b>☀</b> (jika nak syif pagi) atau <b>🌙</b> (jika nak syif petang).</span>
+<div class="see">✅ Satu skrin kecil (timbul) akan terbuka menunjukkan tarikh, waktu syif, dan bilangan staff yang telah menempah.</div></div></div>
+
+<div class="step"><div class="no">4</div><div>
+<span class="do">Baca maklumat di skrin kecil itu. Jika anda berpuas hati, tekan butang hijau besar bertulis <b>"✔ Tempah Syif Ini"</b>.</span>
+<div class="see">✅ Satu mesej hijau akan timbul di atas: "Permohonan tempahan dihantar untuk kelulusan manager". Kotak slot itu bertukar warna KUNING.</div></div></div>
+
+<div class="step"><div class="no">5</div><div>
+<span class="do">Ulangi langkah 3 &amp; 4 untuk tarikh-tarikh lain yang anda mahu.</span>
+Anda boleh tempah beberapa tarikh sekali duduk. Setiap satu akan jadi KUNING dahulu.
+</div></div>
+
+<div class="step"><div class="no">6</div><div>
+<span class="do">SELESAI! Tunggu manager sahkan.</span>
+Manager akan menyemak dan mengesahkan. Selepas itu kotak akan bertukar HIJAU dan jadual rasmi dikeluarkan. Anda juga akan dapat NOTIFIKASI 🔔 (tepal ikon loceng di atas) apabila jadual dikeluarkan.
+</div></div>
+
+<h3>Nak BATALKAN tempahan yang belum disahkan?</h3>
+<div class="step"><div class="no">1</div><div>Tekan slot KUNING tempahan anda itu (seperti langkah 3 di atas).</div></div>
+<div class="step"><div class="no">2</div><div>Tekan butang merah <b>"✕ Batalkan Tempahan Saya"</b>. Selesai — kotak kembali kosong.</div></div>
+<div class="warn">⚠️ Tempahan yang SUDAH HIJAU (disahkan) TIDAK boleh dibatalkan sendiri — kena mohon Tukar Syif (Bahagian 6).</div>
+
+<div class="warn"><b>⚠️ Peringatan "Slot Penuh":</b> Jika keluar mesej "Slot ini telah penuh", bermakna 2 staff sudah menempah slot itu. Pilih tarikh atau syif lain.</div>
+
+<!-- ============ 5. PUNCH IN/OUT ============ -->
+<h2 class="sec pb">BAHAGIAN 5: Punch In &amp; Punch Out (Rekod Kehadiran)</h2>
+<div class="warn"><b>⚡ SANGAT PENTING:</b> Punch in merekodkan bahawa anda BETUL-BETUL berada di kedai pada waktu kerja. Rekod ini menentukan kelayakan <b>Bonus Kehadiran RM30</b> anda!</div>
+
+<h3>Peraturan punch (wajib faham)</h3>
+<table>
+<tr><th>Perkara</th><th>Peraturan</th></tr>
+<tr><td>📍 Lokasi</td><td>Anda <b>MESTI berada dekat kedai</b> (dalam 50 meter) untuk punch. Jika jauh, butang tidak berfungsi.</td></tr>
+<tr><td>🟢 Punch In Pagi</td><td>Sebelum atau tepat jam <b>10:00 pagi</b></td></tr>
+<tr><td>🔴 Punch In Petang</td><td>Sebelum atau tepat jam <b>4:00 petang</b></td></tr>
+<tr><td>⚠️ LAMBAT</td><td>Punch in walaupun 1 minit lewat (cth: 10:01 pagi) = ditanda <b>LAMBAT</b> → anda <b>HILANG Bonus Kehadiran RM30</b> untuk sebulan penuh</td></tr>
+</table>
+
+<h3>Langkah-langkah Punch In (sampai kerja)</h3>
+
+<div class="step"><div class="no">1</div><div>
+<span class="do">Pastikan anda sudah sampai di kedai (bukan di rumah atau dalam kereta jauh dari kedai).</span>
+</div></div>
+
+<div class="step"><div class="no">2</div><div>
+<span class="do">Buka sistem (ikon Soobeh di skrin utama telefon) dan log masuk seperti biasa.</span>
+</div></div>
+
+<div class="step"><div class="no">3</div><div>
+<span class="do">Tekan menu <b>📍 Hadir</b> pada bar bawah skrin.</span>
+<div class="see">✅ Anda akan nampak kad bertulis "Syif Pagi/Petang — Hari Ini" dengan butang besar.</div></div></div>
+
+<div class="step"><div class="no">4</div><div>
+<span class="do">Tekan butang hijau besar <b>"🟢 PUNCH IN"</b>.</span>
+</div></div>
+
+<div class="step"><div class="no">5</div><div>
+<span class="do">Telefon anda akan bertanya kebenaran lokasi: tekan <b>"Allow" / "Benarkan"</b> (benarkan SEKALI SAHAJA atau "While using app" jika ditanya).</span>
+<div class="see">✅ Mesej hijau akan timbul: "Punch IN direkodkan 09:55 (12m)" — angka itu jarak anda dari kedai dalam meter. Siap! Tutup telefon dan mula bekerja.</div>
+<div class="warn">⚠️ Jika keluar "📍 Terlalu jauh dari kedai" — anda belum cukup dekat. Hampiri kedai dan cuba lagi.<br>⚠️ Jika keluar "GPS gagal" — aktifkan "Location" pada tetapan telefon (swipe ke bawah dari atas skrin, tepal ikon loceng/pin), kemudian cuba lagi.</div></div></div>
+
+<h3>Langkah-langkah Punch Out (nak balik)</h3>
+<div class="step"><div class="no">1</div><div>Tekan menu <b>📍 Hadir</b>.</div></div>
+<div class="step"><div class="no">2</div><div>Tekan butang merah besar <b>"🔴 PUNCH OUT"</b> — sama seperti punch in tadi, telefon akan minta lokasi, tekan Benarkan.</div></div>
+<div class="step"><div class="no">3</div><div>Selesai! Rekod hari anda lengkap: In + Out.</div></div>
+
+<div class="tip"><b>💡 Di bawah kad punch</b> ada senarai "Rekod Kehadiran Bulan Ini" — semua punch anda direkodkan di situ. Anda boleh semak sendiri bila-bila masa.</div>
+
+<!-- ============ 6. JADUAL ============ -->
+<h2 class="sec pb">BAHAGIAN 6: Lihat Jadual Kerja Anda</h2>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>🗓️ Jadual</b> pada bar bawah.</span></div></div>
+<div class="step"><div class="no">2</div><div>
+Kad paling atas ialah <b>"📅 Syif Akan Datang (telah disahkan)"</b> — ini jadual rasmi anda. Setiap baris menunjukkan tarikh, syif (pagi/petang), dan jam kerja.
+<div class="see">✅ Kalau kad ini kosong ("Tiada syif disahkan") bermakna anda belum tempah atau belum disahkan — buat segera di tab Kalendar!</div></div></div>
+<div class="step"><div class="no">3</div><div>
+Kad kedua <b>"⏳ Menunggu Kelulusan"</b> menunjukkan tempahan anda yang masih KUNING (belum diputuskan manager).
+</div></div>
+<div class="step"><div class="no">4</div><div>
+Syif yang sudah LALU (lampau) dilipat di bawah — tekan <b>"📜 Syif Lampau Bulan Ini"</b> jika nak semak semula, bersama jualan &amp; jumlah gaji setiap syif.
+</div></div>
+
+<!-- ============ 7. TUKAR SYIF ============ -->
+<h2 class="sec pb">BAHAGIAN 7: Mohon Tukar Syif dengan Rakan</h2>
+<div class="warn"><b>⚠️ PERINGATAN PENTING SEBELUM MOHON:</b> Sebaik sahaja anda MOHON tukar syif (walaupun akhirnya ditolak), anda akan <b>HILANG Bonus Kehadiran RM30</b> untuk bulan itu. Fikir betul-betul dulu!</div>
+
+<h3>A. Anda nak serahkan syif anda kepada rakan</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>🔄 Tukar</b>, kemudian tekan butang <b>"✚ Mohon Tukar"</b>.</span></div></div>
+<div class="step"><div class="no">2</div><div><span class="do">Pilih syif anda</span> — tekan kotak pertama, pilih tarikh syif anda yang nak ditukar.</div></div>
+<div class="step"><div class="no">3</div><div><span class="do">Pilih rakan sekerja</span> — tekan kotak kedua, pilih nama rakan yang anda nak serahkan.</div></div>
+<div class="step"><div class="no">4</div><div><span class="do">Tulis sebab</span> pada kotak kosong (cth: "balik kampung"). Ini untuk manager baca.</div></div>
+<div class="step"><div class="no">5</div><div><span class="do">Tekan <b>"Hantar Permohonan"</b>.</span> Rakan anda akan terima notifikasi. Apabila rakan tekan "✔ Terima", ia dihantar pula kepada MANAGER untuk kelulusan akhir. Hanya apabila manager luluskan, jadual bertukar rasmi.</div></div>
+
+<h3>B. Rakan anda minta tukar dengan anda (anda terima notifikasi)</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>🔄 Tukar</b>.</span> Anda akan nampak kad "Permintaan Kepada Anda" dengan nama rakan &amp; tarikh.</div></div>
+<div class="step"><div class="no">2</div><div><span class="do">Baca dahulu tarikh &amp; sebabnya.</span> Pastikan anda BETUL-BETUL boleh bekerja pada tarikh itu.</div></div>
+<div class="step"><div class="no">3</div><div><span class="do">Tekan <b>"✔ Terima"</b> jika setuju, atau <b>"✕ Tolak"</b> jika tidak boleh.</span></div></div>
+<div class="warn">⚠️ Ambil perhatian: menerima permintaan tukar syif juga akan menghilangkan Bonus Kehadiran anda untuk bulan itu.</div>
+
+<!-- ============ 8. SLIP GAJI ============ -->
+<h2 class="sec pb">BAHAGIAN 8: Lihat Slip Gaji &amp; Anggaran Gaji</h2>
+
+<h3>A. Semak anggaran gaji bulan semasa</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>🧾 Slip Gaji</b>.</span></div></div>
+<div class="step"><div class="no">2</div><div>Kad atas menunjukkan <b>"📊 Anggaran Bulan Ini"</b> — bilangan syif, jam, bonus, elaun, potongan (jika ada) dan jumlah anggaran anda setakat hari ini. Angka ini bertambah setiap kali anda bekerja.</div></div>
+
+<h3>B. Buka &amp; muat turun slip gaji rasmi (PDF)</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>🧾 Slip Gaji</b>, kemudian TEEKAN pada mana-mana slip dalam senarai "Sejarah Slip Rasmi".</span>
+<div class="see">✅ Skrin butiran penuh slip akan terbuka — gaji asas, bonus, elaun, potongan, jumlah akhir.</div></div></div>
+<div class="step"><div class="no">2</div><div><span class="do">Untuk simpan PDF: tekan butang <b>"⬇ Muat Turun PDF"</b>.</span></div></div>
+<div class="step"><div class="no">3</div><div><span class="do">Skrin cetak akan terbuka. Tekan pilihan <b>"Save as PDF" / "Simpan sebagai PDF"</b> (biasanya di atas), kemudian tekan butang <b>Save / Simpan</b>.</span>
+<div class="see">✅ Slip gaji tersimpan dalam telefon anda — biasanya dalam fail "Downloads" / "Muat Turun". Boleh hantar WhatsApp kepada diri sendiri untuk simpanan.</div></div></div>
+
+<!-- ============ 9. TUKAR PIN & LOG KELUAR ============ -->
+<h2 class="sec">BAHAGIAN 9: Tukar PIN Sendiri &amp; Log Keluar</h2>
+
+<h3>Tukar PIN (digalakkan selepas log masuk pertama)</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>👤 Profil</b>.</span></div></div>
+<div class="step"><div class="no">2</div><div><span class="do">Taip PIN LAMA anda pada kotak "PIN semasa".</span></div></div>
+<div class="step"><div class="no">3</div><div><span class="do">Taip PIN BAHARU (4–6 nombor) pada kotak kedua, dan taip SEMULA pin baharu yang sama pada kotak ketiga.</span></div></div>
+<div class="step"><div class="no">4</div><div><span class="do">Tekan <b>"🔑 Simpan PIN Baharu"</b>. Gunakan PIN baharu ini pada log masuk seterusnya.</span></div></div>
+<div class="tip"><b>💡 Nasihat:</b> Guna nombor yang anda senang ingat tapi orang lain susah teka. Jangan guna tarikh lahir anda.</div>
+
+<h3>Log Keluar</h3>
+<div class="step"><div class="no">1</div><div><span class="do">Tekan menu <b>👤 Profil</b>, kemudian tekan butang merah <b>"⏻ Log Keluar"</b> di paling bawah.</span></div></div>
+<div class="tip"><b>💡 Perlu ke?</b> Jika telefon itu telefon sendiri, tak wajib log keluar setiap kali — sistem auto-log-keluar selepas 30 minit tidak digunakan.</div>
+
+<!-- ============ 10. MASALAH BIASA ============ -->
+<h2 class="sec pb">BAHAGIAN 10: Masalah Biasa &amp; Penyelesaian</h2>
+<table>
+<tr><th>Masalah</th><th>Penyelesaian</th></tr>
+<tr><td>Lupa PIN</td><td>Maklumkan Manager — dia boleh set semula serta-merta, tanpa emel/OTP</td></tr>
+<tr><td>Tak dapat log masuk walaupun PIN betul</td><td>Anda mungkin tekan <b>Portal Manager</b> padahal anda staf — kembali &amp; tekan <b>Portal Staff</b></td></tr>
+<tr><td>"Slot penuh"</td><td>Slot itu sudah ada 2 staff — pilih syif atau tarikh lain</td></tr>
+<tr><td>"Jadual tempoh ini telah dikunci"</td><td>Jadual rasmi sudah dikeluarkan — minta manager "Buka Semula Tempoh" jika perlu</td></tr>
+<tr><td>"📍 Terlalu jauh dari kedai"</td><td>Anda berada lebih 50m dari kedai — hampiri kedai, kemudian punch semula</td></tr>
+<tr><td>"GPS gagal"</td><td>Aktifkan Location pada telefon (swipe dari atas skrin → tekan ikon lokasi), pastikan internet hidup, cuba lagi. Keluar ke ruang terbuka jika dalam bangunan</td></tr>
+<tr><td>Kotak kalendar kelabu &amp; tak boleh tekan</td><td>Tempoh itu belum dibuka — dibenarkan tempoh semasa + seterusnya sahaja</td></tr>
+<tr><td>Telefon tiba-tiba log keluar sendiri</td><td>Normal — sistem log keluar selepas 30 minit tidak aktif. Log masuk semula sahaja</td></tr>
+<tr><td>Angka gaji nampak kurang dari jangkaan</td><td>Semak tab Slip Gaji — mungkin ada potongan (dipapar dengan sebabnya) atau bonus kehadiran tidak layak</td></tr>
+</table>
+
+<!-- ============ 11. RINGKASAN ============ -->
+<h2 class="sec">Ringkasan: Rutin Harian &amp; Bulanan Anda</h2>
+<table>
+<tr><th>Bila</th><th>Buat apa</th></tr>
+<tr><td>🔴 <b>SETIAP HARI BEKERJA</b></td><td>Punch IN sebelum 10:00 pagi / 4:00 petang — dalam kawasan kedai. Punch OUT sebelum balik.</td></tr>
+<tr><td>🟡 <b>AWAL SETIAP TEMPOH (1hb &amp; 16hb)</b></td><td>Buka tab Kalendar → tempah syif untuk tempoh baharu JANGAN TUNGGU!</td></tr>
+<tr><td>🟢 <b>BILA DAPAT NOTIFIKASI 🔔</b></td><td>Buka sistem &amp; baca — jadual keluar, permintaan tukar syif, atau slip gaji baru</td></tr>
+<tr><td>🔵 <b>AKHIR BULAN</b></td><td>Tab Slip Gaji → semak &amp; muat turun slip rasmi bulan anda</td></tr>
+</table>
+
+<p style="text-align:center;margin-top:40px;font-size:14px;color:#666">— TAMAT —<br>Sebarang pertanyaan, hubungi Manager anda.<br><b>Sistem Soobeh TBG</b> · "soo sedáp soo nak layi" 🍜</p>
+</div>
+</body>
+</html>
