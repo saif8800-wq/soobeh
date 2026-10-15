@@ -241,7 +241,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -286,6 +286,12 @@ async function loadAll(){
   DB.attendance=(att.data||[]).map(r=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,punchIn:r.punch_in?Date.parse(r.punch_in):null,punchOut:r.punch_out?Date.parse(r.punch_out):null,late:!!r.late,dist:r.pin_dist!=null?+r.pin_dist:null}));
   const tk=await SB.from('tasks').select('*').order('date',{ascending:false}).limit(400);
   DB.tasks=(tk.data||[]).map(r=>({id:r.id,date:r.date,shift:r.shift,template:r.template,note:r.note||'',status:r.status,data:r.data||null,submittedBy:r.submitted_by,submittedAt:r.submitted_at?Date.parse(r.submitted_at):null,late:!!r.late_submit,ackedAt:r.acked_at?Date.parse(r.acked_at):null,t:Date.parse(r.created_at)}));
+  if(isMgr){
+    const ex=await SB.from('expenses').select('*').order('date',{ascending:false}).limit(600);
+    DB.expenses=(ex.data||[]).map(r=>({id:r.id,date:r.date,category:r.category,amount:+r.amount,note:r.note||'',t:Date.parse(r.created_at)}));
+    const fc=await SB.from('fixed_costs').select('*').order('created_at');
+    DB.fixedCosts=(fc.data||[]).map(r=>({id:r.id,category:r.category,label:r.label,amount:+r.amount,day:r.day_of_month,active:!!r.active}));
+  }
   if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
 }
 async function sync(){await loadAll()}
@@ -303,7 +309,7 @@ async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — c
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
-function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null,fmk:null}}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null,fmk:null,emk:null}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
@@ -1638,7 +1644,8 @@ function renderMFinance(){
   const payA=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='01')).reduce((a,p)=>a+p.total,0);
   const payB=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='15')).reduce((a,p)=>a+p.total,0);
   const payAll=payA+payB;
-  const profit=total-payAll;
+  const expT=expensesTotal(mk);
+  const profit=total-payAll-expT;
   const margin=total>0?(profit/total*100):0;
   const laborPct=total>0?(payAll/total*100):0;
   const q=[1,2,3,4].map(qn=>{
@@ -1662,6 +1669,7 @@ function renderMFinance(){
   '<div class="detailrow"><span>Gaji Tempoh 2 (slip mula 15hb)</span><b>'+rm(payB)+'</b></div>'+
   '<div class="detailrow"><span>Total Gaji (T1 + T2)</span><b>'+rm(payAll)+'</b></div>'+
   '<div class="detailrow"><span>Total Jualan Bulanan</span><b>'+rm(total)+'</b></div>'+
+  '<div class="detailrow"><span>💸 Perbelanjaan Kedai</span><b style="color:#fecaca">−'+rm(expT)+'</b></div>'+
   '<div class="ps-totalbox" style="'+(profit<0?'background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(251,191,36,.15));border-color:rgba(239,68,68,.5)':'')+'"><span>'+(profit>=0?'✅ UNTUNG BERSIH':'⚠️ BELASAH')+'</span><span>'+rm(profit)+'</span></div>'+
   '<p class="hint">Margin: <b>'+margin.toFixed(1)+'%</b> · Kos buruh: <b>'+laborPct.toFixed(1)+'%</b> dari jualan '+(laborPct>50?'<span class="chip chip-warn">⚠ tinggi</span>':'<span class="chip chip-ok">sihat</span>')+'</p>'+
   (trend!==null?'<p class="hint">Trend vs '+monthLabel(prevMk)+': '+(trend>=0?'📈 +':'📉 ')+trend.toFixed(1)+'% ('+rm(prevTotal)+' → '+rm(total)+')</p>':'')+'</div>';
@@ -1678,6 +1686,18 @@ function renderMFinance(){
   '<button class="btn btn-primary btn-big" onclick="exportFinancePDF()">⬇ Export PDF Laporan Kewangan</button>'+
   '<p class="hint">'+underMin+' hari bawah minimum RM150 · '+noSale+' hari tiada rekod · purata '+rm(avg)+'/hari'+
   (best?' · Terbaik: '+dShort(best.ds)+' ('+rm2(best.tot)+')':'')+(worst?' · Terendah: '+dShort(worst.ds)+' ('+rm2(worst.tot)+')':'')+'</p></div>';
+  /* PERBELANJAAN SUMMARY dalam KEWANGAN */
+  const expList=expensesOf(mk);
+  const expQ=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));return {qn:qn,s:months.reduce((a,m)=>a+expensesTotal(m),0)}});
+  const expY=DB.expenses.filter(e=>e.date.slice(0,4)===mk.slice(0,4)).reduce((a,e)=>a+e.amount,0);
+  html+='<div class="card glass"><h3>💸 Perbelanjaan — '+monthLabel(mk)+'</h3>'+
+  '<div class="statrow">'+
+  '<div class="stat"><small>Bulanan</small><b>−'+rm(expT)+'</b></div>'+
+  '<div class="stat"><small>Quarter Semasa</small><b>−'+rm(expQ[Math.ceil(+mk.slice(5,7)/3)-1].s)+'</b></div>'+
+  '<div class="stat"><small>Tahunan</small><b>−'+rm(expY)+'</b></div></div>'+
+  '<div class="chips">'+Object.keys(EXP_CATS).map(k=>{const s=expList.filter(e=>e.category===k).reduce((a,e)=>a+e.amount,0);
+  return s?'<span class="chip '+EXP_CATS[k][1]+'">'+EXP_CATS[k][0]+': '+rm2(s)+'</span>':''}).join('')+'</div>'+
+  '<p class="hint">Rekod penuh di tab 💸 Belanja. Kos tetap (sewa/utiliti) auto masuk setiap bulan.</p></div>';
   /* QUARTER */
   html+='<div class="card glass"><h3>📊 Pencapaian Jualan Tahunan — Quarter (Tahun '+mk.slice(0,4)+')</h3>'+
   '<div class="chart">'+q.map(x=>'<div class="chart-col" title="Q'+x.qn+': '+rm(x.s)+'"><div class="bars"><div class="bar be" style="height:'+Math.max(3,x.s/qMax*100)+'%"></div></div><small>Q'+x.qn+'</small></div>').join('')+'</div>'+
@@ -1692,13 +1712,14 @@ function exportFinancePDF(){
   const rows=daySalesRows(mk),total=rows.reduce((a,r)=>a+r.tot,0);
   const payA=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='01')).reduce((a,p)=>a+p.total,0);
   const payB=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='15')).reduce((a,p)=>a+p.total,0);
-  const payAll=payA+payB,profit=total-payAll;
+  const expT=expensesTotal(mk);
+  const payAll=payA+payB,profit=total-payAll-expT;
   const q=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));return {qn:qn,s:months.reduce((a,m)=>a+monthSalesTotal(m),0)}});
   const stg=s=>s==null?'—':(s>=400?'High':s>=250?'Middle':s>=150?'Min':'Bawah');
   const trs=rows.map(r=>'<tr><td>'+dShort(r.ds)+'</td><td style="text-align:center">'+(r.m!=null?'RM '+r.m.toFixed(2):'—')+'</td><td style="text-align:center">'+(r.e!=null?'RM '+r.e.toFixed(2):'—')+'</td><td style="text-align:right">RM '+r.tot.toFixed(2)+'</td><td>'+stg(r.tot)+'</td></tr>').join('');
   $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
   '<div class="ps-head"><div><h1>LAPORAN KEWANGAN</h1><small>Soobeh TBG</small></div><div style="text-align:right"><b>'+monthLabel(mk)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
-  '<div class="ps-grid"><div><b>Total Jualan:</b> RM '+total.toFixed(2)+'</div><div><b>Total Gaji:</b> RM '+payAll.toFixed(2)+'</div><div><b>Gaji Tempoh 1:</b> RM '+payA.toFixed(2)+'</div><div><b>Gaji Tempoh 2:</b> RM '+payB.toFixed(2)+'</div></div>'+
+  '<div class="ps-grid"><div><b>Total Jualan:</b> RM '+total.toFixed(2)+'</div><div><b>Total Gaji:</b> RM '+payAll.toFixed(2)+'</div><div><b>Gaji Tempoh 1:</b> RM '+payA.toFixed(2)+'</div><div><b>Gaji Tempoh 2:</b> RM '+payB.toFixed(2)+'</div><div><b>Perbelanjaan:</b> RM '+expT.toFixed(2)+'</div><div><b>Untung Bersih:</b> RM '+profit.toFixed(2)+'</div></div>'+
   '<div class="ps-total"><span>'+(profit>=0?'UNTUNG BERSIH':'BELASAH')+'</span><span>RM '+profit.toFixed(2)+'</span></div>'+
   '<table><tr><th>Hari</th><th>Pagi</th><th>Petang</th><th>Total</th><th>Stage</th></tr>'+(trs||'<tr><td colspan="5">Tiada rekod</td></tr>')+'</table>'+
   '<table><tr><th>Quarter</th><th style="text-align:right">Jualan</th></tr>'+q.map(x=>'<tr><td>Q'+x.qn+'</td><td style="text-align:right">RM '+x.s.toFixed(2)+'</td></tr>').join('')+'</table>'+
@@ -1706,8 +1727,122 @@ function exportFinancePDF(){
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
+ /* ---------- 16e. PERBELANJAAN KEDAI (Manager) ---------- */
+const EXP_CATS={sewa:['🏠 Sewaan Kedai','chip-wait'],utiliti:['💡 Utiliti (Air/Elektrik/Net)','chip-info'],stok:['📦 Belian Stok','chip-ok'],alatan:['🔧 Alatan & Baiki','chip-no'],lain:['📌 Lain-lain','chip']};
+function emNav(d){ROUTE.emk=shiftMonth(ROUTE.emk||monthKey(todayStr()),d);render()}
+function expensesOf(mk){return DB.expenses.filter(e=>monthKey(e.date)===mk)}
+function expensesTotal(mk){return expensesOf(mk).reduce((a,e)=>a+e.amount,0)}
+function renderMExpenses(){
+  const me=reqMgr();if(!me)return;
+  if(!ROUTE.emk)ROUTE.emk=monthKey(todayStr());
+  const mk=ROUTE.emk;
+  const list=expensesOf(mk).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=expensesTotal(mk);
+  const q=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));
+    return {qn:qn,s:months.reduce((a,m)=>a+expensesTotal(m),0)}});
+  const year=mk.slice(0,4),yearTotal=DB.expenses.filter(e=>e.date.slice(0,4)===year).reduce((a,e)=>a+e.amount,0);
+  let html='<div class="pagehead"><h2>💸 Perbelanjaan Kedai</h2><div class="monthnav glass"><button onclick="emNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="emNav(1)">▶</button></div></div>';
+  /* Form tambah */
+  html+='<div class="card glass"><h3>➖ Tambah Perbelanjaan</h3>'+
+  '<div class="formgrid">'+
+  '<label class="field"><span>Tarikh</span><input type="date" id="exDate" value="'+todayStr()+'" max="'+todayStr()+'"></label>'+
+  '<label class="field"><span>Kategori</span><select id="exCat">'+Object.keys(EXP_CATS).map(k=>'<option value="'+k+'">'+EXP_CATS[k][0]+'</option>').join('')+'</select></label>'+
+  '<label class="field"><span>Jumlah (RM)</span><input type="number" id="exAmt" min="0.01" step="0.01" placeholder="cth: 89.90"></label>'+
+  '<label class="field"><span>Nota (opsyenal)</span><input id="exNote" placeholder="cth: bil elektrik Jan"></label></div>'+
+  '<button class="btn btn-primary btn-big" onclick="addExpenseSubmit()">💾 Simpan Perbelanjaan</button>'+
+  '<p class="hint">Perbelanjaan <b>ditolak automatik</b> dalam kiraan Untung/Rugi di tab 💵 Kewangan. Julat dibenarkan: 180 hari ke belakang sahaja.</p></div>';
+  /* Kos tetap */
+  html+='<div class="card glass"><h3>🔁 Kos Tetap Bulanan (Auto)</h3>'+
+  '<div class="notice info">Set <b>SEKALI sahaja</b> — sistem akan masukkan rekod <b>secara automatik</b> setiap bulan pada hari dipilih. Contoh: Sewaan RM1,500 setiap 1hb — tak perlu ingat tiap bulan!</div>'+
+  (DB.fixedCosts.length?DB.fixedCosts.map(f=>'<div class="brow"><div><b>'+esc(f.label)+'</b> <span class="chip">'+(EXP_CATS[f.category]?EXP_CATS[f.category][0]:f.category)+'</span><div class="chips" style="margin-top:4px"><span class="chip chip-wait">🔁 setiap '+f.day+'hb</span><span class="chip">RM'+f.amount.toFixed(2)+'/bulan</span></div></div><div class="brow-act"><button class="btn btn-sm btn-danger" onclick="delFixedCost(\''+f.id+'\')">🗑 Buang</button></div></div>').join(''):'<p style="opacity:.7">Belum ada kos tetap.</p>')+
+  '<div class="formgrid" style="margin-top:8px">'+
+  '<label class="field"><span>Kategori</span><select id="fcCat"><option value="sewa">🏠 Sewaan Kedai</option><option value="utiliti">💡 Utiliti</option><option value="stok">📦 Stok</option></select></label>'+
+  '<label class="field"><span>Nama</span><input id="fcLabel" placeholder="cth: Sewa kiosk Soobeh"></label>'+
+  '<label class="field"><span>Jumlah sebulan (RM)</span><input type="number" id="fcAmt" min="0.01" step="0.01" placeholder="cth: 1500"></label>'+
+  '<label class="field"><span>Hari setiap bulan (1–28)</span><input type="number" id="fcDay" min="1" max="28" value="1"></label></div>'+
+  '<div class="chips"><button class="btn btn-ok btn-big" onclick="setFixedCostSubmit()">🔁 Set Kos Tetap</button>'+
+  '<button class="btn btn-primary btn-big" onclick="genFixedNow()">⚡ Jana Bulan Ini Sekarang</button></div>'+
+  '<p class="hint">"Jana Bulan Ini" = masukkan serta-merta rekod kos tetap untuk bulan semasa (jika tarikhnya dah sampai). Panggil selepas set kos tetap baharu, atau bila anda buka tab ini awal bulan.</p></div>';
+  /* Summary bulan + quarter + tahun */
+  html+='<div class="statrow">'+
+  '<div class="stat"><small>Jumlah Bulan '+monthLabel(mk)+'</small><b>'+rm(total)+'</b></div>'+
+  '<div class="stat"><small>Purata/Bulan (Tahun '+year+')</small><b>'+rm(monthSalesTotal?'':'')+'</b></div></div>';
+  html+='<div class="card glass"><h3>📊 Summary Perbelanjaan</h3>'+
+  '<h3>Bulanan — pecahan kategori</h3>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Kategori</th><th style="text-align:right">Jumlah</th></tr>'+
+  Object.keys(EXP_CATS).map(k=>{const s=list.filter(e=>e.category===k).reduce((a,e)=>a+e.amount,0);
+  return '<tr><td><span class="chip '+EXP_CATS[k][1]+'">'+EXP_CATS[k][0]+'</span></td><td style="text-align:right">'+(s?rm2(s):'—')+'</td></tr>'}).join('')+
+  '<tr><td><b>TOTAL BULANAN</b></td><td style="text-align:right"><b>'+rm2(total)+'</b></td></tr></table></div>'+
+  '<h3 style="margin-top:14px">Quarter &amp; Tahunan ('+year+')</h3>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Quarter</th><th style="text-align:right">Jumlah</th></tr>'+
+  q.map(x=>'<tr><td><b>Q'+x.qn+'</b></td><td style="text-align:right">'+rm2(x.s)+'</td></tr>').join('')+
+  '<tr><td><b>TOTAL TAHUNAN</b></td><td style="text-align:right"><b>'+rm2(yearTotal)+'</b></td></tr></table></div></div>';
+  /* Senarai rekod */
+  html+='<div class="card glass"><h3>📜 Rekod Perbelanjaan — '+monthLabel(mk)+' ('+list.length+')</h3>'+
+  (list.length?list.map(e=>'<div class="brow"><div><b>'+dShort(e.date)+'</b> <span class="chip '+EXP_CATS[e.category][1]+'">'+EXP_CATS[e.category][0]+'</span>'+(e.note&&e.note!=='—'?'<div class="chips" style="margin-top:4px"><span class="chip">📝 '+esc(e.note)+'</span></div>':'')+'</div><div class="brow-act"><b class="amt" style="color:#fecaca">−'+rm2(e.amount)+'</b><button class="btn btn-sm btn-danger" onclick="delExpense(\''+e.id+'\')">🗑</button></div></div>').join(''):'<p style="opacity:.7">Tiada rekod bulan ini.</p>')+
+  '<button class="btn btn-primary btn-big" onclick="exportExpensesPDF()">⬇ Export PDF Perbelanjaan</button></div>';
+  $('#viewRoot').innerHTML=html;
+}
+async function addExpenseSubmit(){
+  const me=reqMgr();if(!me)return;
+  const date=$('#exDate').value,cat=$('#exCat').value,amt=parseFloat($('#exAmt').value),note=($('#exNote')||{}).value||'';
+  if(!date||!cat)return toast('Lengkapkan tarikh & kategori','err');
+  if(isNaN(amt)||amt<=0||amt>999999)return toast('Jumlah tidak sah','err');
+  const {error}=await SB.rpc('add_expense',{p_date:date,p_category:cat,p_amount:amt,p_note:note.trim()});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Perbelanjaan disimpan ✔','ok');
+}
+async function delExpense(id){
+  const me=reqMgr();if(!me)return;
+  const e=DB.expenses.find(x=>x.id===id);if(!e)return;
+  if(!confirm('Padam perbelanjaan '+EXP_CATS[e.category][0]+' '+rm2(e.amount)+' ('+dShort(e.date)+')?'))return;
+  const {error}=await SB.from('expenses').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('expense_del',e.category+' · '+rm2(e.amount));
+  await sync();render();toast('Rekod dipadam','ok');
+}
+async function setFixedCostSubmit(){
+  const me=reqMgr();if(!me)return;
+  const cat=$('#fcCat').value,label=$('#fcLabel').value.trim(),amt=parseFloat($('#fcAmt').value),day=parseInt($('#fcDay').value,10);
+  if(!label)return toast('Nama wajib diisi','err');
+  if(isNaN(amt)||amt<=0||amt>999999)return toast('Jumlah tidak sah','err');
+  if(isNaN(day)||day<1||day>28)return toast('Hari mesti 1–28','err');
+  const {error}=await SB.rpc('set_fixed_cost',{p_category:cat,p_label:label,p_amount:amt,p_day:day});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Kos tetap diset — auto setiap bulan 🔁','ok');
+}
+async function delFixedCost(id){
+  const me=reqMgr();if(!me)return;
+  if(!confirm('Buang kos tetap ini? Rekod yang SUDAH dijana tidak dipadam — hanya generasi masa depan berhenti.'))return;
+  const {error}=await SB.rpc('del_fixed_cost',{p_id:id});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast('Kos tetap dibuang','ok');
+}
+async function genFixedNow(){
+  const me=reqMgr();if(!me)return;
+  if(!confirm('Jana rekod kos tetap untuk bulan semasa sekarang?\n\n(Rekod yang sudah wujud tidak akan didua-kalikan)'))return;
+  const {data,error}=await SB.rpc('generate_fixed_costs');
+  if(error)return toast(friendly(error),'err');
+  await sync();render();toast((data||0)+' rekod kos tetap dijana ✔','ok');
+}
+function exportExpensesPDF(){
+  const mk=ROUTE.emk||monthKey(todayStr());
+  const list=expensesOf(mk).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=expensesTotal(mk);
+  const q=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));return {qn:qn,s:months.reduce((a,m)=>a+expensesTotal(m),0)}});
+  const year=mk.slice(0,4),yearTotal=DB.expenses.filter(e=>e.date.slice(0,4)===year).reduce((a,e)=>a+e.amount,0);
+  const trs=list.map(e=>'<tr><td>'+dShort(e.date)+'</td><td>'+(EXP_CATS[e.category]?EXP_CATS[e.category][0].replace(/^\S+\s/,''):e.category)+'</td><td>'+esc(e.note||'—')+'</td><td style="text-align:right">RM '+e.amount.toFixed(2)+'</td></tr>').join('');
+  $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
+  '<div class="ps-head"><div><h1>LAPORAN PERBELANJAAN</h1><small>Soobeh TBG</small></div><div style="text-align:right"><b>'+monthLabel(mk)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
+  '<div class="ps-grid"><div><b>Total Bulanan:</b> RM '+total.toFixed(2)+'</div><div><b>Total Tahunan ('+year+'):</b> RM '+yearTotal.toFixed(2)+'</div></div>'+
+  '<table><tr><th>Tarikh</th><th>Kategori</th><th>Nota</th><th style="text-align:right">Jumlah</th></tr>'+(trs||'<tr><td colspan="4">Tiada rekod</td></tr>')+'</table>'+
+  '<table><tr><th>Quarter</th><th style="text-align:right">Jumlah</th></tr>'+q.map(x=>'<tr><td>Q'+x.qn+'</td><td style="text-align:right">RM '+x.s.toFixed(2)+'</td></tr>').join('')+'</table>'+
+  '<p class="ps-note">Rekod "AUTO:" = kos tetap dijana automatik. Laporan dijana oleh Sistem Soobeh TBG.</p></div>';
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);
+}
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'},{k:'staf',ic:'👥',lb:'Staf'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -1724,7 +1859,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
