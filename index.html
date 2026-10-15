@@ -303,7 +303,7 @@ async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — c
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
-function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null}}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null,fmk:null}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
@@ -1599,8 +1599,115 @@ function exportTaskReportPDF(staffId){
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
+ /* ---------- 16d. LAPORAN KEWANGAN (Manager) ---------- */
+function finNav(d){ROUTE.fmk=shiftMonth(ROUTE.fmk||monthKey(todayStr()),d);render()}
+function stageOf(sale){ /* 3 stage sasaran jualan harian */
+  if(sale==null)return {lb:'—',cls:'chip-no'};
+  if(sale>=400)return {lb:'🔵 High',cls:'chip-info'};
+  if(sale>=250)return {lb:'🟠 Middle',cls:'chip-wait'};
+  if(sale>=150)return {lb:'🟢 Min',cls:'chip-ok'};
+  return {lb:'🔴 Bawah min',cls:'chip-warn'};
+}
+function daySalesRows(mk){ /* jadual harian: pagi+petang+total, ikut stage */
+  const dim=daysInMonth(mk),rows=[];
+  for(let d=1;d<=dim;d++){
+    const ds=mk+'-'+pad2(d);
+    const m=getSale(ds,'morning'),e=getSale(ds,'evening');
+    if(m==null&&e==null)continue;
+    const tot=(m||0)+(e||0),sg=stageOf(tot);
+    rows.push({ds:ds,m:m,e:e,tot:tot,sg:sg,sgm:stageOf(m),sge:stageOf(e)});
+  }
+  return rows;
+}
+function monthSalesTotal(mk){return daySalesRows(mk).reduce((a,r)=>a+r.tot,0)}
+function periodPay(mk,ab){ /* jumlah gaji slip ikut tempoh (A=1–15, B=16–akhir) */
+  const b=periodBounds(mk+(ab==='A'?'-A':'-B'));
+  return DB.payslips.filter(p=>p.start>=b[0]&&p.start<=b[1]&&p.dateFake!==1).reduce((a,p)=>a+p.total,0);
+}
+function renderMFinance(){
+  const me=reqMgr();if(!me)return;
+  if(!ROUTE.fmk)ROUTE.fmk=monthKey(todayStr());
+  const mk=ROUTE.fmk,cur=todayStr().slice(0,7);
+  const rows=daySalesRows(mk);
+  const total=rows.reduce((a,r)=>a+r.tot,0);
+  const noSale=rows.filter(r=>r.tot===0).length;
+  const underMin=rows.filter(r=>r.tot<150).length;
+  const avg=rows.length?total/rows.length:0;
+  const best=rows.slice().sort((a,b)=>b.tot-a.tot)[0];
+  const worst=rows.slice().filter(r=>r.tot>0).sort((a,b)=>a.tot-b.tot)[0];
+  const payA=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='01')).reduce((a,p)=>a+p.total,0);
+  const payB=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='15')).reduce((a,p)=>a+p.total,0);
+  const payAll=payA+payB;
+  const profit=total-payAll;
+  const margin=total>0?(profit/total*100):0;
+  const laborPct=total>0?(payAll/total*100):0;
+  const q=[1,2,3,4].map(qn=>{
+    const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));
+    const s=months.reduce((a,m)=>a+monthSalesTotal(m),0);
+    return {qn:qn,s:s};
+  });
+  const qMax=Math.max(1,...q.map(x=>x.s));
+  const prevMk=shiftMonth(mk,-1),prevTotal=monthSalesTotal(prevMk);
+  const trend=prevTotal>0?((total-prevTotal)/prevTotal*100):null;
+  let html='<div class="pagehead"><h2>💵 Laporan Kewangan</h2><div class="monthnav glass"><button onclick="finNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="finNav(1)">▶</button></div></div>';
+  /* KAD RINGKASAN */
+  html+='<div class="statrow">'+
+  '<div class="stat"><small>Total Jualan Bulan</small><b>'+rm(total)+'</b></div>'+
+  '<div class="stat"><small>Purata Sehari</small><b>'+rm(avg)+'</b></div>'+
+  '<div class="stat"><small>Kos Gaji</small><b>'+rm(payAll)+'</b></div>'+
+  '<div class="stat"><small>'+(profit>=0?'Untung':'Belasah')+'</small><b style="color:'+(profit>=0?'#a7f3d0':'#fecaca')+'">'+rm(profit)+'</b></div></div>';
+  /* LAPORAN GAJI VS JUALAN */
+  html+='<div class="card glass"><h3>💰 Gaji vs Jualan — '+monthLabel(mk)+'</h3>'+
+  '<div class="detailrow"><span>Gaji Tempoh 1 (slip mula 1hb)</span><b>'+rm(payA)+'</b></div>'+
+  '<div class="detailrow"><span>Gaji Tempoh 2 (slip mula 15hb)</span><b>'+rm(payB)+'</b></div>'+
+  '<div class="detailrow"><span>Total Gaji (T1 + T2)</span><b>'+rm(payAll)+'</b></div>'+
+  '<div class="detailrow"><span>Total Jualan Bulanan</span><b>'+rm(total)+'</b></div>'+
+  '<div class="ps-totalbox" style="'+(profit<0?'background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(251,191,36,.15));border-color:rgba(239,68,68,.5)':'')+'"><span>'+(profit>=0?'✅ UNTUNG BERSIH':'⚠️ BELASAH')+'</span><span>'+rm(profit)+'</span></div>'+
+  '<p class="hint">Margin: <b>'+margin.toFixed(1)+'%</b> · Kos buruh: <b>'+laborPct.toFixed(1)+'%</b> dari jualan '+(laborPct>50?'<span class="chip chip-warn">⚠ tinggi</span>':'<span class="chip chip-ok">sihat</span>')+'</p>'+
+  (trend!==null?'<p class="hint">Trend vs '+monthLabel(prevMk)+': '+(trend>=0?'📈 +':'📉 ')+trend.toFixed(1)+'% ('+rm(prevTotal)+' → '+rm(total)+')</p>':'')+'</div>';
+  /* LAPORAN HARIAN + STAGE */
+  html+='<div class="card glass"><h3>📅 Jualan Harian — '+monthLabel(mk)+' ('+rows.length+' hari)</h3>'+
+  '<div class="chips" style="margin:6px 0"><span class="chip chip-ok">🟢 Min RM150</span><span class="chip chip-wait">🟠 Middle RM250</span><span class="chip chip-info">🔵 High RM400+</span><span class="chip chip-warn">🔴 Bawah min</span></div>'+
+  '<div class="tblwrap"><table class="tbl"><tr><th>Hari</th><th>Pagi</th><th>Petang</th><th>Total</th><th>Stage</th></tr>'+
+  rows.map(r=>'<tr><td>'+dShort(r.ds)+' '+(isWeekend(r.ds)?'<span class="chip">W</span>':'')+'</td>'+
+  '<td>'+(r.m!=null?rm2(r.m)+' <span class="chip '+r.sgm.cls+'" style="font-size:10px">'+r.sgm.lb+'</span>':'—')+'</td>'+
+  '<td>'+(r.e!=null?rm2(r.e)+' <span class="chip '+r.sge.cls+'" style="font-size:10px">'+r.sge.lb+'</span>':'—')+'</td>'+
+  '<td><b>'+rm2(r.tot)+'</b></td><td><span class="chip '+r.sg.cls+'">'+r.sg.lb+'</span></td></tr>').join('')+
+  '</table></div>'+
+  '<div class="ps-totalbox"><span>TOTAL JUALAN BULANAN</span><span>'+rm(total)+'</span></div>'+
+  '<button class="btn btn-primary btn-big" onclick="exportFinancePDF()">⬇ Export PDF Laporan Kewangan</button>'+
+  '<p class="hint">'+underMin+' hari bawah minimum RM150 · '+noSale+' hari tiada rekod · purata '+rm(avg)+'/hari'+
+  (best?' · Terbaik: '+dShort(best.ds)+' ('+rm2(best.tot)+')':'')+(worst?' · Terendah: '+dShort(worst.ds)+' ('+rm2(worst.tot)+')':'')+'</p></div>';
+  /* QUARTER */
+  html+='<div class="card glass"><h3>📊 Pencapaian Jualan Tahunan — Quarter (Tahun '+mk.slice(0,4)+')</h3>'+
+  '<div class="chart">'+q.map(x=>'<div class="chart-col" title="Q'+x.qn+': '+rm(x.s)+'"><div class="bars"><div class="bar be" style="height:'+Math.max(3,x.s/qMax*100)+'%"></div></div><small>Q'+x.qn+'</small></div>').join('')+'</div>'+
+  '<div class="tblwrap" style="margin-top:8px"><table class="tbl"><tr><th>Quarter</th><th>Bulan</th><th style="text-align:right">Jualan</th></tr>'+
+  q.map(x=>{const ms=[x.qn*3-2,x.qn*3-1,x.qn*3].map(m=>monthLabel(mk.slice(0,4)+'-'+pad2(m)).split(' ')[0]).join(', ');
+  return '<tr><td><b>Q'+x.qn+'</b>'+(monthKey(todayStr()).slice(0,4)===mk.slice(0,4)&&Math.ceil(+todayStr().slice(5,7)/3)===x.qn?' <span class="chip chip-info">semasa</span>':'')+'</td><td>'+ms+'</td><td style="text-align:right"><b>'+rm(x.s)+'</b></td></tr>'}).join('')+
+  '</table></div><p class="hint">Quarter semasa hanya kira bulan-bulan yang dah berlalu dalam suku tahun itu.</p></div>';
+  $('#viewRoot').innerHTML=html;
+}
+function exportFinancePDF(){
+  const mk=ROUTE.fmk||monthKey(todayStr());
+  const rows=daySalesRows(mk),total=rows.reduce((a,r)=>a+r.tot,0);
+  const payA=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='01')).reduce((a,p)=>a+p.total,0);
+  const payB=DB.payslips.filter(p=>monthKey(p.start)===mk&&(p.start.slice(8,10)==='15')).reduce((a,p)=>a+p.total,0);
+  const payAll=payA+payB,profit=total-payAll;
+  const q=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));return {qn:qn,s:months.reduce((a,m)=>a+monthSalesTotal(m),0)}});
+  const stg=s=>s==null?'—':(s>=400?'High':s>=250?'Middle':s>=150?'Min':'Bawah');
+  const trs=rows.map(r=>'<tr><td>'+dShort(r.ds)+'</td><td style="text-align:center">'+(r.m!=null?'RM '+r.m.toFixed(2):'—')+'</td><td style="text-align:center">'+(r.e!=null?'RM '+r.e.toFixed(2):'—')+'</td><td style="text-align:right">RM '+r.tot.toFixed(2)+'</td><td>'+stg(r.tot)+'</td></tr>').join('');
+  $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
+  '<div class="ps-head"><div><h1>LAPORAN KEWANGAN</h1><small>Soobeh TBG</small></div><div style="text-align:right"><b>'+monthLabel(mk)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
+  '<div class="ps-grid"><div><b>Total Jualan:</b> RM '+total.toFixed(2)+'</div><div><b>Total Gaji:</b> RM '+payAll.toFixed(2)+'</div><div><b>Gaji Tempoh 1:</b> RM '+payA.toFixed(2)+'</div><div><b>Gaji Tempoh 2:</b> RM '+payB.toFixed(2)+'</div></div>'+
+  '<div class="ps-total"><span>'+(profit>=0?'UNTUNG BERSIH':'BELASAH')+'</span><span>RM '+profit.toFixed(2)+'</span></div>'+
+  '<table><tr><th>Hari</th><th>Pagi</th><th>Petang</th><th>Total</th><th>Stage</th></tr>'+(trs||'<tr><td colspan="5">Tiada rekod</td></tr>')+'</table>'+
+  '<table><tr><th>Quarter</th><th style="text-align:right">Jualan</th></tr>'+q.map(x=>'<tr><td>Q'+x.qn+'</td><td style="text-align:right">RM '+x.s.toFixed(2)+'</td></tr>').join('')+'</table>'+
+  '<p class="ps-note">Stage harian: Min RM150 · Middle RM250 · High RM400+. Laporan dijana automatik oleh Sistem Soobeh TBG.</p></div>';
+  toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
+  setTimeout(()=>{try{window.print()}catch(e){}},120);
+}
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'staf',ic:'👥',lb:'Staf'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -1617,7 +1724,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
