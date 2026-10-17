@@ -204,6 +204,17 @@ details.demo .inner{padding:0 18px 16px}
 .wa-counter{font-size:14px;opacity:.85;align-self:center;font-weight:700}
 .tpl-field{margin:10px 0}
 .tpl-field textarea{min-height:90px;font-size:15px;line-height:1.5}
+/* Compact staff view (Manager) */
+.staff-compact{padding:12px 14px !important}
+.staff-compact .staff-card-row{gap:12px}
+.staff-compact .info b{font-size:16px}
+.staff-toggle-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px}
+.staff-toggle-row .info{flex:1;min-width:200px}
+.action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:8px 0}
+.action-grid .btn{flex-direction:column;text-align:center;line-height:1.3;padding:14px 8px;font-size:13.5px;min-height:auto;gap:4px}
+.action-grid .btn .ic{font-size:22px;display:block;margin-bottom:4px}
+.search-input{margin:0 !important;width:100% !important}
+.result-count{font-size:13.5px;opacity:.7;margin:6px 2px;font-weight:700}
 /* Profile avatar & edit-profile UI */
 .avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:32px;color:#fff;overflow:hidden;flex:none;border:2px solid rgba(255,255,255,.25);object-fit:cover}
 .avatar img{width:100%;height:100%;object-fit:cover;display:block}
@@ -2108,32 +2119,82 @@ function renderMPayroll(){
 }
 function renderMStaff(){
   const me=currentUser(),isAdmin=me.role==='admin';
-  const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
   const S=DB.settings;
-  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>'+
-  '<div class="card glass"><h3>💉 Elaun Suntikan Typhoid — Kawalan Bayaran</h3>'+
-  '<div class="detailrow"><span>Status bayaran</span><b>'+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+'</b></div>'+
-  '<div class="detailrow"><span>Kadar</span><b>'+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff)</b></div>'+
-  '<button class="btn '+(S.typhoidEnabled===false?'btn-ok':'btn-danger')+' btn-big" onclick="toggleTyphoidEnabled()">'+(S.typhoidEnabled===false?'▶ Mula Bayaran Elaun':'⏸ Matikan Bayaran Elaun')+'</button>'+
-  '<p class="hint">Manager boleh ON/OFF bila-bila masa — hanya memberi kesan kepada slip yang dijana <b>selepas</b> ini. Laraskan kiraan "n/'+S.typhoidMax+'" setiap staff melalui butang 💉 Typhoid pada kad staff di bawah.</p></div>';
-  html+=list.map(x=>{
-    const inactive=x.active===false;
-    return '<div class="card glass"><div class="staff-card-row">'+
-    '<div class="avatar sm">'+(x.avatarUrl?'<img src="'+esc(x.avatarUrl)+'" alt="avatar">':'<span>'+esc((x.name||'?').charAt(0).toUpperCase())+'</span>')+'</div>'+
-    '<div class="info"><div class="brow" style="padding:0;border:0"><div><b>'+esc(x.name)+'</b> '+(inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
-    '<div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin')+'</span><span class="chip">'+esc(x.username)+'</span>'+
-    (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'" title="Kitaran gaji">'+(x.payCycle==='monthly'?'Bulanan':'2-Minggu')+'</span><span class="chip">💉 Typhoid '+x.typhoidCount+'/'+DB.settings.typhoidMax+'</span>':'')+'</div></div>'+
-    '<div class="brow-act">'+(x.role==='staff'?'<button class="btn btn-sm" onclick="toggleCycle(\''+x.id+'\')" title="Tukar kitaran gaji">🔁 Kitaran</button><button class="btn btn-sm" onclick="openTyphoidModal(\''+x.id+'\')" title="Laraskan elaun typhoid">💉 Typhoid</button><button class="btn btn-sm" onclick="openStaffHoursModal(\''+x.id+'\')" title="Jam default staff ini">⏱ Jam</button>':'')+
-    '<button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+x.id+'\')">✏️ Edit Profil</button>'+
-    '<button class="btn btn-sm" onclick="openResetPin(\''+x.id+'\')">🔑 Set Semula PIN</button>'+
-    (x.id!==me.id?'<button class="btn btn-sm '+(inactive?'btn-ok':'btn-danger')+'" onclick="toggleActive(\''+x.id+'\')">'+(inactive?'✔ Aktifkan':'⏻ Nyahaktif')+'</button>':'')+'</div></div>'+
-    (x.phone&&x.phone!=='—'?'<div class="detailrow" style="border:0"><span>Telefon</span><b>'+esc(x.phone)+'</b></div>':'')+
-    (x.address?'<div class="detailrow" style="border:0"><span>Alamat</span><b style="text-align:right;white-space:pre-line">'+esc(x.address)+'</b></div>':'')+
-    (x.maritalStatus?'<div class="detailrow" style="border:0"><span>Status</span><b><span class="chip chip-info">'+esc(({single:'Tidak Berkahwin',married:'Berkahwin',widowed:'Duda / Janda',divorced:'Cerai'})[x.maritalStatus]||x.maritalStatus)+'</span></b></div>':'')+
-    '</div>';
-  }).join('');
-  html+='<p class="hint">💡 "Tambah Akaun" kini <b>sepenuhnya automatik</b> dari app — tiada perlu buka Supabase Dashboard. Akaun baharu boleh log masuk serta-merta.</p>';
+  const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
+  const search=(ROUTE.staffSearch||'').toLowerCase().trim();
+  const filtered=search?list.filter(x=>x.name.toLowerCase().includes(search)||(x.username||'').toLowerCase().includes(search)):list;
+  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>';
+  // Compact Typhoid toggle (satu baris)
+  html+='<div class="card glass staff-toggle-row">'+
+  '<div class="info"><b>💉 Elaun Typhoid</b> '+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+
+  '<div class="hint" style="margin-top:4px">Kadar '+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff). Hanya beri kesan kepada slip yang dijana <b>selepas</b> ini.</div></div>'+
+  '<button class="btn btn-sm '+(S.typhoidEnabled===false?'btn-ok':'btn-danger')+'" onclick="toggleTyphoidEnabled()">'+(S.typhoidEnabled===false?'▶ Mula Bayaran':'⏸ Matikan')+'</button>'+
+  '</div>';
+  // Search box
+  html+='<div class="card glass" style="padding:10px 14px"><input class="search-input" id="staffSearchInput" placeholder="🔍 Cari staf ikut nama atau username..." oninput="setStaffSearch(this.value)" value="'+esc(ROUTE.staffSearch||'')+'"></div>';
+  // Result count
+  html+='<p class="result-count">📊 '+filtered.length+' dari '+list.length+' staf'+(search?' (ditapis: "'+esc(search)+'")':'')+(search&&filtered.length===0?' — cuba kata kunci lain':'')+'</p>';
+  // Staff cards (compact)
+  if(filtered.length===0){
+    html+='<div class="card glass"><p style="opacity:.75;text-align:center;padding:20px">⚠️ Tiada staf dijumpai'+(search?' untuk carian ini.':' — tambah akaun baru dengan butang hijau di atas.')+'</p></div>';
+  }else{
+    html+=filtered.map(x=>{
+      const inactive=x.active===false;
+      const roleLabel=x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin';
+      const cycleLabel=x.payCycle==='monthly'?'Bulanan':'2-Minggu';
+      const avatarHtml=x.avatarUrl?'<img src="'+esc(x.avatarUrl)+'" alt="avatar">':'<span>'+esc((x.name||'?').charAt(0).toUpperCase())+'</span>';
+      return '<div class="card glass staff-compact"><div class="staff-card-row">'+
+      '<div class="avatar sm">'+avatarHtml+'</div>'+
+      '<div class="info"><b>'+esc(x.name)+'</b> '+(inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
+      '<div class="chips" style="margin-top:4px">'+
+      '<span class="chip chip-info">'+roleLabel+'</span>'+
+      '<span class="chip">@'+esc(x.username)+'</span>'+
+      (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'">'+cycleLabel+'</span><span class="chip">💉 '+x.typhoidCount+'/'+S.typhoidMax+'</span>':'')+
+      '</div></div>'+
+      '<button class="btn btn-sm btn-primary" onclick="openStaffManage(\''+x.id+'\')" title="Lihat maklumat penuh & semua tindakan">⚡ Urus</button>'+
+      '</div></div>';
+    }).join('');
+  }
+  html+='<p class="hint">💡 Tip: Klik butang <b>"⚡ Urus"</b> pada setiap staf untuk lihat maklumat penuh (telefon, alamat, status perkahwinan) & semua tindakan (edit profil, tukar kitaran, set semula PIN, dll). "Tambah Akaun" kini <b>sepenuhnya automatik</b> dari app — tiada perlu buka Supabase Dashboard. Akaun baharu boleh log masuk serta-merta.</p>';
   $('#viewRoot').innerHTML=html;
+  if(search){const inp=$('#staffSearchInput');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}}
+}
+function setStaffSearch(v){ROUTE.staffSearch=v;renderMStaff()}
+function openStaffManage(id){
+  const me=currentUser();
+  const x=DB.users.find(u=>u.id===id);
+  if(!x)return toast('Staf tidak dijumpai','err');
+  const inactive=x.active===false;
+  const MARITAL_LB={single:'Tidak Berkahwin',married:'Berkahwin',widowed:'Duda / Janda',divorced:'Cerai'};
+  const roleLabel=x.role==='staff'?'Staff':x.role==='manager'?'Manager':'Admin';
+  const cycleLabel=x.payCycle==='monthly'?'Bulanan':'Setiap 2 Minggu';
+  const avatarHtml=x.avatarUrl?'<img src="'+esc(x.avatarUrl)+'" alt="avatar">':'<span>'+esc((x.name||'?').charAt(0).toUpperCase())+'</span>';
+  const body='<div class="profile-info-row">'+
+  '<div class="avatar lg">'+avatarHtml+'</div>'+
+  '<div style="flex:1;min-width:0"><h3 style="margin:0 0 6px">'+esc(x.name)+'</h3>'+
+  '<div class="chips">'+
+  '<span class="chip chip-info">'+roleLabel+'</span>'+
+  '<span class="chip">@'+esc(x.username)+'</span>'+
+  (x.role==='staff'?'<span class="chip '+(x.payCycle==='monthly'?'chip-ok':'chip-wait')+'">'+cycleLabel+'</span><span class="chip">💉 Typhoid '+x.typhoidCount+'/'+DB.settings.typhoidMax+'</span>':'')+
+  (inactive?'<span class="chip chip-no">Tidak Aktif</span>':'')+
+  '</div></div></div>'+
+  '<h3 style="margin-top:18px">📋 Maklumat</h3>'+
+  '<div class="detailrow"><span>No. Telefon</span><b>'+(x.phone&&x.phone!=='—'?esc(x.phone):'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Alamat</span><b style="text-align:right;white-space:pre-line">'+(x.address?esc(x.address):'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Status Perkahwinan</span><b>'+(x.maritalStatus?'<span class="chip chip-info">'+esc(MARITAL_LB[x.maritalStatus]||x.maritalStatus)+'</span>':'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Kitaran Gaji</span><b>'+cycleLabel+'</b></div>'+
+  '<div class="detailrow"><span>Elaun Typhoid</span><b>'+x.typhoidCount+'/'+DB.settings.typhoidMax+' kali dibayar</b></div>'+
+  '<h3 style="margin-top:20px">⚡ Tindakan</h3>'+
+  '<div class="action-grid">'+
+  '<button class="btn btn-primary" onclick="closeModal();openEditProfile(\''+x.id+'\')"><span class="ic">✏️</span>Edit Profil</button>'+
+  (x.role==='staff'?'<button class="btn" onclick="closeModal();toggleCycle(\''+x.id+'\')"><span class="ic">🔁</span>Tukar Kitaran</button>':'')+
+  (x.role==='staff'?'<button class="btn" onclick="closeModal();openTyphoidModal(\''+x.id+'\')"><span class="ic">💉</span>Laraskan Typhoid</button>':'')+
+  (x.role==='staff'?'<button class="btn" onclick="closeModal();openStaffHoursModal(\''+x.id+'\')"><span class="ic">⏱</span>Jam Default</button>':'')+
+  '<button class="btn" onclick="closeModal();openResetPin(\''+x.id+'\')"><span class="ic">🔑</span>Set Semula PIN</button>'+
+  (x.id!==me.id?'<button class="btn '+(inactive?'btn-ok':'btn-danger')+'" onclick="closeModal();toggleActive(\''+x.id+'\')"><span class="ic">'+(inactive?'✔':'⏻')+'</span>'+(inactive?'Aktifkan':'Nyahaktif')+'</button>':'')+
+  '</div>'+
+  '<p class="hint" style="margin-top:14px">💡 Klik tindakan untuk melaksanakannya — modal ini akan tutup & tindakan dipilih akan terbuka.</p>';
+  openModal('⚡ Urus Staf — '+esc(x.name),body);
 }
 function renderMSettings(){
   const me=currentUser(),S=DB.settings;
