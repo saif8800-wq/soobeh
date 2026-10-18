@@ -215,6 +215,13 @@ details.demo .inner{padding:0 18px 16px}
 .action-grid .btn .ic{font-size:22px;display:block;margin-bottom:4px}
 .search-input{margin:0 !important;width:100% !important}
 .result-count{font-size:13.5px;opacity:.7;margin:6px 2px;font-weight:700}
+/* Consignment module UI */
+.consign-item-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin:6px 0;align-items:center}
+@media(max-width:760px){.consign-item-row{grid-template-columns:1fr;gap:4px}}
+.consign-item-row input,.consign-item-row select{min-height:42px}
+.consign-subtotal{font-weight:800;white-space:nowrap;text-align:right;padding:0 4px}
+.consign-item-row .btn-danger{padding:0 8px;min-height:42px}
+.consign-view{margin-top:10px}
 /* Profile avatar & edit-profile UI */
 .avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:32px;color:#fff;overflow:hidden;flex:none;border:2px solid rgba(255,255,255,.25);object-fit:cover}
 .avatar img{width:100%;height:100%;object-fit:cover;display:block}
@@ -284,7 +291,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{}}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[]}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -335,7 +342,29 @@ async function loadAll(){
     const fc=await SB.from('fixed_costs').select('*').order('created_at');
     DB.fixedCosts=(fc.data||[]).map(r=>({id:r.id,category:r.category,label:r.label,amount:+r.amount,day:r.day_of_month,active:!!r.active}));
   }
-  if(isMgr){const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);DB.audit=(a.data||[]).map(mapAudit)}
+  if(isMgr){
+    const a=await SB.from('audit').select('*').order('at',{ascending:false}).limit(300);
+    DB.audit=(a.data||[]).map(mapAudit);
+    // Consign module data
+    const cs=[
+      SB.from('consignors').select('*').order('name'),
+      SB.from('consign_products').select('*').order('name'),
+      SB.from('consign_receipts').select('*').order('received_date',{ascending:false}).limit(200)
+    ];
+    const cq=await Promise.all(cs);
+    DB.consignors=(cq[0].data||[]).map(mapConsignor);
+    DB.consignProducts=(cq[1].data||[]).map(mapConsignProduct);
+    DB.consignReceipts=(cq[2].data||[]).map(mapConsignReceipt);
+    if(DB.consignReceipts.length){
+      const rids=DB.consignReceipts.map(r=>r.id);
+      const items=await SB.from('consign_receipt_items').select('*').in('receipt_id',rids);
+      DB.consignReceiptItems=(items.data||[]).map(mapConsignReceiptItem);
+      const pays=await SB.from('consign_payments').select('*').order('payment_date',{ascending:false}).limit(200);
+      DB.consignPayments=(pays.data||[]).map(mapConsignPayment);
+    }else{
+      DB.consignReceiptItems=[];DB.consignPayments=[];
+    }
+  }
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
@@ -352,7 +381,7 @@ async function ensureSlotCounts(mk){ /* kiraan rakan per slot (tanpa nama) — c
 /* ---------- 4. SESI, AUDIT, NOTIFIKASI ---------- */
 function currentUser(){return ME}
 function reqMgr(){const u=currentUser();if(!u||!['manager','admin'].includes(u.role)){toast('Akses ditolak 🔒','err');return null}return u}
-function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null,fmk:null,emk:null}}
+function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash',pk:null,bpk:null,spk:null,pmk:null,saleEdit:null,lrmk:null,lrStaff:null,ltmk:null,fmk:null,emk:null,staffSearch:null,consignSub:'consignors'}}
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
@@ -1896,7 +1925,7 @@ function exportExpensesPDF(){
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'},{k:'staf',ic:'👥',lb:'Staf'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'},{k:'staf',ic:'👥',lb:'Staf'},{k:'consign',ic:'📦',lb:'Consign'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -1913,7 +1942,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,consign:renderMConsign,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
@@ -2522,6 +2551,609 @@ async function saveMyUsername(){
   toast('Username ditukar ✔ — log masuk semula dengan '+nv,'ok');
   setTimeout(async()=>{try{await SB.auth.signOut()}catch(e){};ME=null;DB=emptyDB();ROUTE=freshROUTE();render();},1500);
 }
+
+/* ---------- 17d. CONSIGN MODULE (Manager) ---------- */
+// Mappers untuk data consignment dari Supabase
+const mapConsignor=r=>({id:r.id,code:r.code,name:r.name,phone:r.phone||'',email:r.email||'',bankName:r.bank_name||'',bankAccount:r.bank_account||'',notes:r.notes||'',active:r.active!==false});
+const mapConsignProduct=r=>({id:r.id,consignorId:r.consignor_id,code:r.code||'',name:r.name,unitCost:+r.unit_cost,sellPrice:+r.sell_price,active:r.active!==false});
+const mapConsignReceipt=r=>({id:r.id,receiptNo:r.receipt_no,consignorId:r.consignor_id,receivedDate:r.received_date,totalCost:+r.total_cost,notes:r.notes||'',status:r.status,items:[],payment:null,receivedBy:r.received_by,createdAt:Date.parse(r.created_at)});
+const mapConsignReceiptItem=r=>({id:r.id,receiptId:r.receipt_id,productId:r.product_id,quantity:+r.quantity,unitCost:+r.unit_cost,totalCost:+r.total_cost});
+const mapConsignPayment=r=>({id:r.id,paymentNo:r.payment_no,receiptId:r.receipt_id,consignorId:r.consignor_id,paymentDate:r.payment_date,totalAmount:+r.total_amount,paymentMethod:r.payment_method,bankAccountPaid:r.bank_account_paid||'',notes:r.notes||'',lineItems:r.line_items||[],paidBy:r.paid_by,createdAt:Date.parse(r.created_at)});
+
+// Helpers
+function consignorOf(id){if(!id)return null;return (DB.consignors||[]).find(c=>c.id===id)||null}
+function consignorName(id){const c=consignorOf(id);return c?c.name:'—'}
+function consignorCode(id){const c=consignorOf(id);return c?c.code:'—'}
+function productOf(id){if(!id)return null;return (DB.consignProducts||[]).find(p=>p.id===id)||null}
+function productName(id){const p=productOf(id);return p?p.name:'—'}
+function receiptItems(receiptId){return (DB.consignReceiptItems||[]).filter(i=>i.receiptId===receiptId)}
+function receiptPayment(receiptId){return (DB.consignPayments||[]).find(p=>p.receiptId===receiptId)||null}
+function consignProductsOf(consignorId){return (DB.consignProducts||[]).filter(p=>p.consignorId===consignorId&&p.active)}
+
+// Auto-generate receipt_no dan payment_no
+function nextConsignNo(prefix,existingArr,selectorFn){
+  const ym=todayStr().slice(0,7).replace('-','');
+  const pfx=prefix+'-'+ym+'-';
+  const nums=existingArr.filter(selectorFn).map(x=>{
+    const m=String(selectorFn(x)).match(/-(\d{3})$/);
+    return m?+m[1]:0;
+  });
+  const next=(nums.length?Math.max(...nums):0)+1;
+  return pfx+String(next).padStart(3,'0');
+}
+
+// Sub-tab navigation
+function setConsignSub(s){ROUTE.consignSub=s;render()}
+
+// ===== MAIN RENDER =====
+function renderMConsign(){
+  const me=currentUser();
+  if(!me||!['manager','admin'].includes(me.role)){
+    $('#viewRoot').innerHTML='<div class="notice warn">Akses ditolak — Manager/Admin sahaja.</div>';
+    return;
+  }
+  if(!ROUTE.consignSub)ROUTE.consignSub='consignors';
+  const SUB=[
+    {k:'consignors',ic:'\xf0\x9f\x8f\xa2',lb:'Syarikat'},
+    {k:'receipts',ic:'\xf0\x9f\x93\xa6',lb:'Stok Masuk'},
+    {k:'payments',ic:'\xf0\x9f\x92\xb0',lb:'Bayaran'}
+  ];
+  const consignors=DB.consignors||[];
+  const receipts=DB.consignReceipts||[];
+  const payments=DB.consignPayments||[];
+  const pendingPay=receipts.filter(r=>r.status==='received');
+  const totalOwed=pendingPay.reduce((s,r)=>s+r.totalCost,0);
+  let html='<div class="pagehead"><h2>\xf0\x9f\x93\xa6 Pengurusan Konsain</h2></div>'+
+    '<div class="chips" style="margin-bottom:12px">'+
+    '<span class="chip chip-info">\xf0\x9f\x8f\xa2 '+consignors.length+' syarikat</span>'+
+    '<span class="chip chip-info">\xf0\x9f\x93\xa6 '+receipts.length+' resit</span>'+
+    '<span class="chip chip-wait">\xe2\x8f\xb3 '+pendingPay.length+' menunggu bayar</span>'+
+    '<span class="chip chip-warn">\xf0\x9f\x92\xb5 RM '+totalOwed.toFixed(2)+' tertunggak</span>'+
+    (payments.length?'<span class="chip chip-ok">\xe2\x9c\x94 '+payments.length+' dah dibayar</span>':'')+
+    '</div>'+
+    '<nav class="pillnav glass">'+
+    SUB.map(s=>'<button class="pill'+(ROUTE.consignSub===s.k?' active':'')+'" onclick="setConsignSub(\''+s.k+'\')">'+s.ic+' '+s.lb+'</button>').join('')+
+    '</nav>'+
+    '<div id="consignView"></div>';
+  $('#viewRoot').innerHTML=html;
+  // Render sub-tab content
+  if(ROUTE.consignSub==='consignors')renderConsignConsignors();
+  else if(ROUTE.consignSub==='receipts')renderConsignReceipts();
+  else if(ROUTE.consignSub==='payments')renderConsignPayments();
+}
+
+// ===== SUB-TAB 1: SYARIKAT (consignors + products) =====
+function renderConsignConsignors(){
+  const list=(DB.consignors||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  let html='<div style="margin:10px 0"><button class="btn btn-primary btn-sm" onclick="openConsignorModal()">\xe2\x9c\x9a Tambah Syarikat</button></div>';
+  if(!list.length){
+    html+='<div class="card glass"><p style="opacity:.75;text-align:center;padding:24px">\xe2\x9a\xa0\xef\xb8\x8f Belum ada syarikat consignment. Tambah satu untuk mula.</p></div>';
+  }else{
+    html+=list.map(c=>{
+      const products=consignProductsOf(c.id);
+      const receiptCount=(DB.consignReceipts||[]).filter(r=>r.consignorId===c.id).length;
+      const paidCount=(DB.consignPayments||[]).filter(p=>p.consignorId===c.id).length;
+      return '<div class="card glass"><div class="brow"><div><b>'+esc(c.name)+'</b> <span class="chip chip-info">'+esc(c.code)+'</span>'+
+        '<div class="chips" style="margin-top:5px">'+
+        (c.bankName?'<span class="chip">\xf0\x9f\x8f\xa6 '+esc(c.bankName)+'</span>':'')+
+        (c.bankAccount?'<span class="chip">\xf0\x9f\x92\xb3 '+esc(c.bankAccount)+'</span>':'')+
+        (c.phone?'<span class="chip">\xf0\x9f\x93\x9e '+esc(c.phone)+'</span>':'')+
+        '<span class="chip chip-info">\xf0\x9f\x93\xa6 '+products.length+' produk</span>'+
+        '<span class="chip">'+receiptCount+' resit · '+paidCount+' bayaran</span>'+
+        '</div></div>'+
+        '<div class="brow-act">'+
+        '<button class="btn btn-sm" onclick="openConsignProductsModal(\''+c.id+'\')" title="Urus produk">\xf0\x9f\x93\x8b Produk</button>'+
+        '<button class="btn btn-sm btn-primary" onclick="openConsignorModal(\''+c.id+'\')">\xe2\x9c\x8f\xef\xb8\x8f Edit</button>'+
+        '</div></div>'+
+        (c.notes?'<p class="hint" style="margin:6px 0 0">'+esc(c.notes)+'</p>':'')+
+        '</div>';
+    }).join('');
+  }
+  $('#consignView').innerHTML=html;
+}
+
+// ===== SUB-TAB 2: STOK MASUK (receipts) =====
+function renderConsignReceipts(){
+  const list=(DB.consignReceipts||[]).slice().sort((a,b)=>b.receivedDate.localeCompare(a.receivedDate));
+  let html='<div style="margin:10px 0"><button class="btn btn-primary btn-sm" onclick="openConsignReceiptModal()">\xe2\x9c\x9a Tambah Stok Masuk</button></div>';
+  if(!list.length){
+    html+='<div class="card glass"><p style="opacity:.75;text-align:center;padding:24px">\xf0\x9f\x93\xa6 Belum ada resit stok masuk. Klik butang hijau di atas untuk tambah.</p></div>';
+  }else{
+    html+=list.map(r=>{
+      const c=consignorOf(r.consignorId);
+      const items=receiptItems(r.id);
+      const payment=receiptPayment(r.id);
+      const statusChip=r.status==='paid'?'<span class="chip chip-ok">\xe2\x9c\x94 Dah Bayar</span>':
+        r.status==='cancelled'?'<span class="chip chip-no">Dibatalkan</span>':
+        '<span class="chip chip-wait">\xe2\x8f\xb3 Menunggu Bayar</span>';
+      let body='<div class="card glass"><div class="brow"><div><b>'+esc(r.receiptNo)+'</b> '+statusChip+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-info">\xf0\x9f\x8f\xa2 '+esc(c?c.name:'—')+'</span>'+
+        '<span class="chip">\xf0\x9f\x93\x85 '+dShort(r.receivedDate)+'</span>'+
+        '<span class="chip">\xf0\x9f\x93\xa6 '+items.length+' item</span>'+
+        '<span class="chip chip-warn">\xf0\x9f\x92\xb5 RM '+r.totalCost.toFixed(2)+'</span>'+
+        '</div></div>'+
+        '<div class="brow-act">'+
+        '<button class="btn btn-sm" onclick="openConsignReceiptModal(\''+r.id+'\')" title="Lihat butiran">\xf0\x9f\x91\x81\xef\xb8\x8f Lihat</button>'+
+        (r.status==='received'?'<button class="btn btn-sm btn-ok" onclick="openConsignPaymentModal(\''+r.id+'\')">\xf0\x9f\x92\xb0 Buat Bayaran</button>':'')+
+        (r.status==='paid'&&payment?'<button class="btn btn-sm btn-primary" onclick="printConsignPayment(\''+payment.id+'\')">\xf0\x9f\xa7\xbe Resit Bayaran</button>':'')+
+        '</div></div>';
+      // Item list
+      if(items.length){
+        body+='<div class="tblwrap" style="margin-top:8px"><table class="tbl"><tr><th>Produk</th><th style="text-align:right">Kuantiti</th><th style="text-align:right">Harga/Unit</th><th style="text-align:right">Jumlah</th></tr>'+
+          items.map(it=>{
+            const p=productOf(it.productId);
+            return '<tr><td>'+esc(p?p.name:'?')+'</td><td style="text-align:right">'+it.quantity+'</td><td style="text-align:right">RM '+it.unitCost.toFixed(2)+'</td><td style="text-align:right">RM '+it.totalCost.toFixed(2)+'</td></tr>';
+          }).join('')+
+          '<tr style="font-weight:800"><td colspan="3" style="text-align:right">Jumlah Kos</td><td style="text-align:right">RM '+r.totalCost.toFixed(2)+'</td></tr>'+
+          '</table></div>';
+      }
+      if(r.notes)body+='<p class="hint" style="margin:6px 0 0">'+esc(r.notes)+'</p>';
+      body+='</div>';
+      return body;
+    }).join('');
+  }
+  $('#consignView').innerHTML=html;
+}
+
+// ===== SUB-TAB 3: BAYARAN (payments) =====
+function renderConsignPayments(){
+  const list=(DB.consignPayments||[]).slice().sort((a,b)=>b.paymentDate.localeCompare(a.paymentDate));
+  const pending=(DB.consignReceipts||[]).filter(r=>r.status==='received');
+  let html='';
+  // Pending section
+  if(pending.length){
+    html+='<h3 style="margin:14px 0 8px">\xe2\x8f\xb3 Resit Menunggu Bayaran ('+pending.length+')</h3>';
+    html+=pending.map(r=>{
+      const c=consignorOf(r.consignorId);
+      const items=receiptItems(r.id);
+      return '<div class="card glass"><div class="brow"><div><b>'+esc(r.receiptNo)+'</b>'+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-info">\xf0\x9f\x8f\xa2 '+esc(c?c.name:'—')+'</span>'+
+        '<span class="chip">\xf0\x9f\x93\x85 '+dShort(r.receivedDate)+'</span>'+
+        '<span class="chip">\xf0\x9f\x93\xa6 '+items.length+' item</span>'+
+        '<span class="chip chip-warn">\xf0\x9f\x92\xb5 RM '+r.totalCost.toFixed(2)+'</span>'+
+        '</div></div>'+
+        '<div class="brow-act"><button class="btn btn-sm btn-ok" onclick="openConsignPaymentModal(\''+r.id+'\')">\xf0\x9f\x92\xb0 Buat Bayaran</button>'+
+        '<button class="btn btn-sm" onclick="openConsignReceiptModal(\''+r.id+'\')">\xf0\x9f\x91\x81\xef\xb8\x8f Lihat Resit</button></div></div></div>';
+    }).join('');
+  }else{
+    html+='<div class="card glass"><p style="opacity:.75;text-align:center;padding:18px">\xe2\x9c\x94 Tiada resit menunggu bayaran.</p></div>';
+  }
+  // Payment history
+  if(list.length){
+    html+='<h3 style="margin:20px 0 8px">\xf0\x9f\x93\x9c Sejarah Bayaran ('+list.length+')</h3>';
+    html+=list.map(p=>{
+      const c=consignorOf(p.consignorId);
+      const r=(DB.consignReceipts||[]).find(x=>x.id===p.receiptId);
+      const methodLabel=p.paymentMethod==='bank_transfer'?'Pemindahan Bank':p.paymentMethod==='cash'?'Tunai':p.paymentMethod==='cheque'?'Cek':'Lain-lain';
+      return '<div class="card glass"><div class="brow"><div><b>'+esc(p.paymentNo)+'</b>'+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-info">\xf0\x9f\x8f\xa2 '+esc(c?c.name:'—')+'</span>'+
+        '<span class="chip">\xf0\x9f\x93\x85 '+dShort(p.paymentDate)+'</span>'+
+        '<span class="chip chip-ok">'+methodLabel+'</span>'+
+        (r?'<span class="chip">Resit: '+esc(r.receiptNo)+'</span>':'')+
+        '<span class="chip chip-warn">\xf0\x9f\x92\xb5 RM '+p.totalAmount.toFixed(2)+'</span>'+
+        '</div></div>'+
+        '<div class="brow-act"><button class="btn btn-sm btn-primary" onclick="printConsignPayment(\''+p.id+'\')">\xf0\x9f\xa7\xbe Muat Turun Resit</button></div></div>'+
+        (p.notes?'<p class="hint" style="margin:6px 0 0">'+esc(p.notes)+'</p>':'')+
+        '</div>';
+    }).join('');
+  }
+  $('#consignView').innerHTML=html;
+}
+
+// ===== MODAL: TAMBAH/EDIT SYARIKAT =====
+function openConsignorModal(id){
+  const c=id?(DB.consignors||[]).find(x=>x.id===id):null;
+  const html='<div class="formgrid">'+
+    '<label class="field"><span>Kod Syarikat *</span><input id="cnCode" value="'+(c?esc(c.code):'C'+String((DB.consignors||[]).length+1).padStart(3,'0'))+'" placeholder="cth: C001"></label>'+
+    '<label class="field"><span>Nama Syarikat *</span><input id="cnName" value="'+(c?esc(c.name):'')+'" placeholder="cth: Syarikat ABC Sdn Bhd"></label>'+
+    '</div>'+
+    '<div class="formgrid">'+
+    '<label class="field"><span>No. Telefon</span><input id="cnPhone" value="'+(c?esc(c.phone):'')+'" placeholder="cth: 03-1234 5678"></label>'+
+    '<label class="field"><span>Email</span><input id="cnEmail" value="'+(c?esc(c.email):'')+'" placeholder="cth: info@abc.com"></label>'+
+    '</div>'+
+    '<div class="formgrid">'+
+    '<label class="field"><span>Nama Bank</span><input id="cnBank" value="'+(c?esc(c.bankName):'')+'" placeholder="cth: Maybank / CIMB / RHB"></label>'+
+    '<label class="field"><span>No. Akaun Bank</span><input id="cnAcc" value="'+(c?esc(c.bankAccount):'')+'" placeholder="cth: 1234567890123"></label>'+
+    '</div>'+
+    '<label class="field"><span>Nota (opsyenal)</span><textarea id="cnNotes" rows="2" placeholder="cth: bayaran setiap 30 hari">'+(c?esc(c.notes):'')+'</textarea></label>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="saveConsignor('+(id?'\''+id+'\'':'null')+')">\xf0\x9f\x92\xbe Simpan</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button></div>';
+  openModal((c?'\xe2\x9c\x8f\xef\xb8\x8f Edit Syarikat':'\xe2\x9c\x9a Tambah Syarikat')+(c?' — '+esc(c.name):''),html);
+}
+
+async function saveConsignor(id){
+  const code=($('#cnCode')||{}).value||'';
+  const name=($('#cnName')||{}).value||'';
+  if(!code.trim()||!name.trim())return toast('Kod dan Nama wajib diisi','err');
+  const payload={
+    code:code.trim(),
+    name:name.trim(),
+    phone:($('#cnPhone')||{}).value||'',
+    email:($('#cnEmail')||{}).value||'',
+    bank_name:($('#cnBank')||{}).value||'',
+    bank_account:($('#cnAcc')||{}).value||'',
+    notes:($('#cnNotes')||{}).value||''
+  };
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  let result;
+  if(id){
+    result=await SB.from('consignors').update(payload).eq('id',id);
+  }else{
+    payload.created_by=ME.id;
+    result=await SB.from('consignors').insert(payload);
+  }
+  if(btn)btn.disabled=false;
+  if(result.error)return toast(friendly(result.error),'err');
+  await logAudit(id?'consignor_upd':'consignor_ins',code.trim()+' — '+name.trim());
+  closeModal();await sync();render();toast('Syarikat disimpan \xe2\x9c\x94','ok');
+}
+
+// ===== MODAL: URUS PRODUK SYARIKAT =====
+function openConsignProductsModal(consignorId){
+  const c=consignorOf(consignorId);
+  if(!c)return toast('Syarikat tidak dijumpai','err');
+  const products=consignProductsOf(consignorId);
+  let html='<div class="chips" style="margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openConsignProductModal(\''+consignorId+'\')">\xe2\x9c\x9a Tambah Produk</button></div>';
+  if(!products.length){
+    html+='<div class="card glass"><p style="opacity:.75;text-align:center;padding:18px">Belum ada produk untuk syarikat ini.</p></div>';
+  }else{
+    html+=products.map(p=>{
+      return '<div class="card glass"><div class="brow"><div><b>'+esc(p.name)+'</b>'+
+        (p.code?' <span class="chip">'+esc(p.code)+'</span>':'')+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-warn">Kos: RM '+p.unitCost.toFixed(2)+'/unit</span>'+
+        (p.sellPrice?'<span class="chip chip-ok">Jual: RM '+p.sellPrice.toFixed(2)+'/unit</span>':'')+
+        '</div></div>'+
+        '<div class="brow-act">'+
+        '<button class="btn btn-sm btn-primary" onclick="openConsignProductModal(\''+consignorId+'\',\''+p.id+'\')">\xe2\x9c\x8f\xef\xb8\x8f Edit</button>'+
+        '</div></div></div>';
+    }).join('');
+  }
+  openModal('\xf0\x9f\x93\x8b Produk — '+esc(c.name),html);
+}
+
+function openConsignProductModal(consignorId,productId){
+  const c=consignorOf(consignorId);
+  if(!c)return;
+  const p=productId?(DB.consignProducts||[]).find(x=>x.id===productId):null;
+  const html='<label class="field"><span>Nama Produk *</span><input id="cpName" value="'+(p?esc(p.name):'')+'" placeholder="cth: Baju Kurung Merah"></label>'+
+    '<label class="field"><span>Kod Produk (opsyenal)</span><input id="cpCode" value="'+(p?esc(p.code):'')+'" placeholder="cth: BK-001"></label>'+
+    '<div class="formgrid">'+
+    '<label class="field"><span>Harga Kos / Unit (RM) *</span><input type="number" id="cpCost" step="0.01" min="0" value="'+(p?p.unitCost.toFixed(2):'')+'" placeholder="cth: 25.00"></label>'+
+    '<label class="field"><span>Harga Jualan Dicadang (RM)</span><input type="number" id="cpSell" step="0.01" min="0" value="'+(p?p.sellPrice.toFixed(2):'')+'" placeholder="cth: 39.90"></label>'+
+    '</div>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="saveConsignProduct(\''+consignorId+'\''+(p?',\''+p.id+'\'':'')+')">\xf0\x9f\x92\xbe Simpan</button>'+
+    '<button class="btn ghost" onclick="openConsignProductsModal(\''+consignorId+'\')">Kembali</button></div>';
+  openModal((p?'\xe2\x9c\x8f\xef\xb8\x8f Edit Produk':'\xe2\x9c\x9a Tambah Produk')+(p?' — '+esc(p.name):''),html);
+}
+
+async function saveConsignProduct(consignorId,productId){
+  const name=($('#cpName')||{}).value||'';
+  const code=($('#cpCode')||{}).value||'';
+  const cost=parseFloat(($('#cpCost')||{}).value||'0');
+  const sell=parseFloat(($('#cpSell')||{}).value||'0');
+  if(!name.trim())return toast('Nama produk wajib diisi','err');
+  if(isNaN(cost)||cost<0)return toast('Harga kos tidak sah','err');
+  const payload={
+    consignor_id:consignorId,
+    name:name.trim(),
+    code:code.trim(),
+    unit_cost:cost,
+    sell_price:sell
+  };
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  let result;
+  if(productId){
+    result=await SB.from('consign_products').update(payload).eq('id',productId);
+  }else{
+    result=await SB.from('consign_products').insert(payload);
+  }
+  if(btn)btn.disabled=false;
+  if(result.error)return toast(friendly(result.error),'err');
+  await logAudit(productId?'consign_products_upd':'consign_products_ins',name.trim());
+  openConsignProductsModal(consignorId); // re-open parent modal
+  await sync();
+  renderConsignConsignors(); // refresh list
+  toast('Produk disimpan \xe2\x9c\x94','ok');
+}
+
+// ===== MODAL: TAMBAH STOK MASUK (multi-product receipt) =====
+function openConsignReceiptModal(receiptId){
+  const r=receiptId?(DB.consignReceipts||[]).find(x=>x.id===receiptId):null;
+  if(r){
+    // View mode — just show items
+    const c=consignorOf(r.consignorId);
+    const items=receiptItems(r.id);
+    const payment=receiptPayment(r.id);
+    let html='<div class="detailrow"><span>No. Resit</span><b>'+esc(r.receiptNo)+'</b></div>'+
+      '<div class="detailrow"><span>Syarikat</span><b>'+esc(c?c.name:'—')+'</b></div>'+
+      '<div class="detailrow"><span>Tarikh Terima</span><b>'+dShort(r.receivedDate)+'</b></div>'+
+      '<div class="detailrow"><span>Status</span><b>'+(r.status==='paid'?'<span class="chip chip-ok">\xe2\x9c\x94 Dah Bayar</span>':'<span class="chip chip-wait">\xe2\x8f\xb3 Menunggu</span>')+'</b></div>'+
+      '<div class="detailrow"><span>Jumlah Kos</span><b>RM '+r.totalCost.toFixed(2)+'</b></div>'+
+      (r.notes?'<div class="detailrow"><span>Nota</span><b>'+esc(r.notes)+'</b></div>':'');
+    html+='<h3 style="margin-top:14px">\xf0\x9f\x93\xa6 Item</h3>'+
+      '<div class="tblwrap"><table class="tbl"><tr><th>Produk</th><th style="text-align:right">Kuantiti</th><th style="text-align:right">Harga/Unit</th><th style="text-align:right">Jumlah</th></tr>'+
+      items.map(it=>{
+        const p=productOf(it.productId);
+        return '<tr><td>'+esc(p?p.name:'?')+'</td><td style="text-align:right">'+it.quantity+'</td><td style="text-align:right">RM '+it.unitCost.toFixed(2)+'</td><td style="text-align:right">RM '+it.totalCost.toFixed(2)+'</td></tr>';
+      }).join('')+
+      '<tr style="font-weight:800"><td colspan="3" style="text-align:right">Jumlah Kos</td><td style="text-align:right">RM '+r.totalCost.toFixed(2)+'</td></tr>'+
+      '</table></div>';
+    if(payment){
+      html+='<h3 style="margin-top:14px">\xf0\x9f\x92\xb0 Bayaran</h3>'+
+        '<div class="detailrow"><span>No. Bayaran</span><b>'+esc(payment.paymentNo)+'</b></div>'+
+        '<div class="detailrow"><span>Tarikh Bayar</span><b>'+dShort(payment.paymentDate)+'</b></div>'+
+        '<div class="detailrow"><span>Kaedah</span><b>'+(payment.paymentMethod==='bank_transfer'?'Pemindahan Bank':payment.paymentMethod==='cash'?'Tunai':payment.paymentMethod==='cheque'?'Cek':'Lain')+'</b></div>'+
+        '<div class="detailrow"><span>Jumlah</span><b>RM '+payment.totalAmount.toFixed(2)+'</b></div>'+
+        '<div class="chips" style="margin-top:8px"><button class="btn btn-primary" onclick="printConsignPayment(\''+payment.id+'\')">\xf0\x9f\xa7\xbe Muat Turun Resit</button></div>';
+    }else if(r.status==='received'){
+      html+='<div class="chips" style="margin-top:14px"><button class="btn btn-ok btn-big" onclick="openConsignPaymentModal(\''+r.id+'\')">\xf0\x9f\x92\xb0 Buat Bayaran</button></div>';
+    }
+    openModal('\xf0\x9f\x93\xa6 Resit '+esc(r.receiptNo),html);
+    return;
+  }
+  // Add mode — multi-product form
+  const consignors=(DB.consignors||[]).filter(c=>c.active);
+  if(!consignors.length){
+    openModal('\xe2\x9a\xa0\xef\xb8\x8f Tidak Boleh Tambah Stok','<div class="notice warn">Belum ada syarikat consignment. Sila tambah syarikat di tab Syarikat dahulu.</div>');
+    return;
+  }
+  // Init line items state
+  window._consignItems=[{}]; // start with 1 empty row
+  const receiptNo=nextConsignNo('GR',DB.consignReceipts||[],r=>r.receiptNo);
+  const html='<div class="detailrow"><span>No. Resit (auto)</span><b>'+esc(receiptNo)+'</b></div>'+
+    '<label class="field"><span>Syarikat Consignment *</span><select id="crConsignor" onchange="refreshConsignProducts()">'+
+    consignors.map(c=>'<option value="'+c.id+'">'+esc(c.code)+' — '+esc(c.name)+'</option>').join('')+
+    '</select></label>'+
+    '<label class="field"><span>Tarikh Terima *</span><input type="date" id="crDate" value="'+todayStr()+'"></label>'+
+    '<h3 style="margin-top:14px">\xf0\x9f\x93\xa6 Item</h3>'+
+    '<div id="crItemsList"></div>'+
+    '<div class="chips" style="margin:6px 0"><button class="btn btn-sm btn-primary" onclick="addConsignItemRow()">\xe2\x9e\x95 Tambah Item</button></div>'+
+    '<label class="field"><span>Nota (opsyenal)</span><textarea id="crNotes" rows="2" placeholder="cth: sekatan 14 hari bayaran"></textarea></label>'+
+    '<div class="detailrow" id="crTotal"><span>Jumlah Keseluruhan</span><b>RM 0.00</b></div>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="saveConsignReceipt(\''+receiptNo+'\')">\xf0\x9f\x92\xbe Simpan Resit</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button></div>';
+  openModal('\xe2\x9c\x9a Tambah Stok Masuk',html);
+  // Render first item row
+  refreshConsignProducts();
+}
+
+function refreshConsignProducts(){
+  // Re-render all item rows with updated product list
+  const list=$('#crItemsList');if(!list)return;
+  const consignorId=$('#crConsignor').value;
+  const products=consignProductsOf(consignorId);
+  if(!products.length){
+    list.innerHTML='<div class="notice warn">Syarikat ini belum ada produk. Tambah produk dahulu di tab Syarikat.</div>'+
+      '<div class="chips"><button class="btn btn-sm" onclick="closeModal();setConsignSub(\'consignors\')">\xe2\x86\x92 Tambah Produk</button></div>';
+    return;
+  }
+  list.innerHTML=window._consignItems.map((it,idx)=>{
+    return '<div class="consign-item-row" data-idx="'+idx+'">'+
+      '<select id="crItem_'+idx+'" onchange="updateConsignItemTotal('+idx+')">'+
+      products.map(p=>'<option value="'+p.id+'"'+(it.productId===p.id?' selected':'')+'>'+esc(p.name)+' \xe2\x80\x94 RM '+p.unitCost.toFixed(2)+'/unit</option>').join('')+
+      '</select>'+
+      '<input type="number" id="crQty_'+idx+'" min="1" step="1" placeholder="Kuantiti" value="'+(it.quantity||'')+'" oninput="updateConsignItemTotal('+idx+')">'+
+      '<input type="number" id="crCost_'+idx+'" min="0" step="0.01" placeholder="Harga/Unit" value="'+(it.unitCost||products[0].unitCost)+'" oninput="updateConsignItemTotal('+idx+')">'+
+      '<b id="crSub_'+idx+'" class="consign-subtotal">RM 0.00</b>'+
+      (window._consignItems.length>1?'<button class="btn btn-sm btn-danger" onclick="removeConsignItemRow('+idx+')">\xe2\x9c\x95</button>':'')+
+      '</div>';
+  }).join('');
+  // Calculate totals for existing rows
+  window._consignItems.forEach((_,i)=>updateConsignItemTotal(i));
+}
+
+function addConsignItemRow(){
+  window._consignItems.push({});
+  refreshConsignProducts();
+}
+
+function removeConsignItemRow(idx){
+  window._consignItems.splice(idx,1);
+  refreshConsignProducts();
+}
+
+function updateConsignItemTotal(idx){
+  const prodId=$('#crItem_'+idx)&&$('#crItem_'+idx).value;
+  const qty=parseFloat(($('#crQty_'+idx)||{}).value||'0')||0;
+  const cost=parseFloat(($('#crCost_'+idx)||{}).value||'0')||0;
+  // Auto-fill cost from product if not overridden
+  if(prodId){
+    const p=productOf(prodId);
+    if(p&&!$('#crCost_'+idx).dataset.touched){
+      $('#crCost_'+idx).value=p.unitCost.toFixed(2);
+    }
+  }
+  const sub=qty*cost;
+  const subEl=$('#crSub_'+idx);
+  if(subEl)subEl.textContent='RM '+sub.toFixed(2);
+  // Save to state
+  window._consignItems[idx]={productId:prodId,quantity:qty,unitCost:cost,totalCost:sub};
+  // Update grand total
+  const grand=window._consignItems.reduce((s,it)=>s+(it.totalCost||0),0);
+  const gt=$('#crTotal');
+  if(gt)gt.innerHTML='<span>Jumlah Keseluruhan</span><b>RM '+grand.toFixed(2)+'</b>';
+}
+
+async function saveConsignReceipt(receiptNo){
+  const consignorId=$('#crConsignor').value;
+  const receivedDate=$('#crDate').value;
+  const notes=($('#crNotes')||{}).value||'';
+  if(!consignorId||!receivedDate)return toast('Sila pilih syarikat dan tarikh','err');
+  // Validate items
+  const items=window._consignItems.filter(it=>it.productId&&it.quantity>0);
+  if(!items.length)return toast('Sekurang-kurangnya 1 item diperlukan','err');
+  const total=items.reduce((s,it)=>s+it.totalCost,0);
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  // Insert header
+  const {data:hdr,error:e1}=await SB.from('consign_receipts').insert({
+    receipt_no:receiptNo,
+    consignor_id:consignorId,
+    received_date:receivedDate,
+    total_cost:total,
+    notes:notes,
+    status:'received',
+    received_by:ME.id
+  }).select();
+  if(e1){
+    if(btn)btn.disabled=false;
+    return toast(friendly(e1),'err');
+  }
+  const receiptId=hdr[0].id;
+  // Insert items
+  const itemRows=items.map(it=>({
+    receipt_id:receiptId,
+    product_id:it.productId,
+    quantity:it.quantity,
+    unit_cost:it.unitCost,
+    total_cost:it.totalCost
+  }));
+  const {error:e2}=await SB.from('consign_receipt_items').insert(itemRows);
+  if(btn)btn.disabled=false;
+  if(e2)return toast('Resit disimpan tapi item gagal: '+friendly(e2),'err');
+  await logAudit('consign_receipts_ins',receiptNo+' — RM '+total.toFixed(2));
+  closeModal();await sync();render();
+  toast('Resit '+receiptNo+' disimpan \xe2\x9c\x94','ok');
+}
+
+// ===== MODAL: BAYARAN PER RESIT =====
+function openConsignPaymentModal(receiptId){
+  const r=(DB.consignReceipts||[]).find(x=>x.id===receiptId);
+  if(!r)return toast('Resit tidak dijumpai','err');
+  if(r.status==='paid')return toast('Resit ini dah dibayar','err');
+  const c=consignorOf(r.consignorId);
+  const items=receiptItems(receiptId);
+  const paymentNo=nextConsignNo('PAY',DB.consignPayments||[],p=>p.paymentNo);
+  // Build line_items snapshot
+  const lineItems=items.map(it=>{
+    const p=productOf(it.productId);
+    return {name:p?p.name:'?',code:p?p.code:'',quantity:it.quantity,unit_cost:it.unitCost,total_cost:it.totalCost};
+  });
+  const METHODS=[
+    {v:'bank_transfer',lb:'Pemindahan Bank'},
+    {v:'cash',lb:'Tunai'},
+    {v:'cheque',lb:'Cek'},
+    {v:'other',lb:'Lain-lain'}
+  ];
+  const html='<div class="detailrow"><span>No. Bayaran (auto)</span><b>'+esc(paymentNo)+'</b></div>'+
+    '<div class="detailrow"><span>Resit</span><b>'+esc(r.receiptNo)+'</b></div>'+
+    '<div class="detailrow"><span>Syarikat</span><b>'+esc(c?c.name:'—')+'</b></div>'+
+    '<div class="detailrow"><span>Akaun Bayaran</span><b>'+(c&&c.bankAccount?esc(c.bankName||'—')+' / '+esc(c.bankAccount):'\xe2\x80\x94 belum diisi')+'</b></div>'+
+    '<div class="tblwrap" style="margin-top:8px"><table class="tbl"><tr><th>Produk</th><th style="text-align:right">Kuantiti</th><th style="text-align:right">Harga/Unit</th><th style="text-align:right">Jumlah</th></tr>'+
+    items.map(it=>{
+      const p=productOf(it.productId);
+      return '<tr><td>'+esc(p?p.name:'?')+'</td><td style="text-align:right">'+it.quantity+'</td><td style="text-align:right">RM '+it.unitCost.toFixed(2)+'</td><td style="text-align:right">RM '+it.totalCost.toFixed(2)+'</td></tr>';
+    }).join('')+
+    '<tr style="font-weight:800"><td colspan="3" style="text-align:right">Jumlah Bayaran</td><td style="text-align:right">RM '+r.totalCost.toFixed(2)+'</td></tr>'+
+    '</table></div>'+
+    '<label class="field"><span>Tarikh Bayaran *</span><input type="date" id="cpDate" value="'+todayStr()+'"></label>'+
+    '<label class="field"><span>Kaedah Bayaran</span><select id="cpMethod">'+METHODS.map(m=>'<option value="'+m.v+'"'+(m.v==='bank_transfer'?' selected':'')+'>'+esc(m.lb)+'</option>').join('')+'</select></label>'+
+    '<label class="field"><span>No. Akaun Dibayar (snapshot)</span><input id="cpAcc" value="'+(c&&c.bankAccount?esc(c.bankAccount):'')+'" placeholder="cth: 1234567890123"></label>'+
+    '<label class="field"><span>Nota (opsyenal)</span><textarea id="cpNotes" rows="2" placeholder="cth: bayaran penuh untuk resit '+r.receiptNo+'"></textarea></label>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="saveConsignPayment(\''+receiptId+'\',\''+paymentNo+'\')">\xf0\x9f\x92\xbe Simpan Bayaran</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button></div>'+
+    '<p class="hint">\xf0\x9f\x92\xa1 Selepas simpan, resit '+esc(r.receiptNo)+' akan ditandai sebagai <b>dah dibayar</b>. Anda boleh muat turun resit PDF bila-bila masa.</p>';
+  // Save line items to window for use in save function
+  window._consignPaymentItems=lineItems;
+  window._consignPaymentTotal=r.totalCost;
+  openModal('\xf0\x9f\x92\xb0 Bayaran untuk '+esc(r.receiptNo),html);
+}
+
+async function saveConsignPayment(receiptId,paymentNo){
+  const r=(DB.consignReceipts||[]).find(x=>x.id===receiptId);
+  if(!r)return toast('Resit tidak dijumpai','err');
+  if(r.status==='paid')return toast('Resit ini dah dibayar','err');
+  const paymentDate=$('#cpDate').value;
+  const method=$('#cpMethod').value;
+  const acc=($('#cpAcc')||{}).value||'';
+  const notes=($('#cpNotes')||{}).value||'';
+  if(!paymentDate)return toast('Tarikh bayaran wajib','err');
+  const payload={
+    payment_no:paymentNo,
+    receipt_id:receiptId,
+    consignor_id:r.consignorId,
+    payment_date:paymentDate,
+    total_amount:window._consignPaymentTotal,
+    payment_method:method,
+    bank_account_paid:acc,
+    notes:notes,
+    line_items:window._consignPaymentItems,
+    status:'paid',
+    paid_by:ME.id
+  };
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {error:e1}=await SB.from('consign_payments').insert(payload);
+  if(e1){if(btn)btn.disabled=false;return toast(friendly(e1),'err');}
+  // Update receipt status to 'paid'
+  const {error:e2}=await SB.from('consign_receipts').update({status:'paid'}).eq('id',receiptId);
+  if(btn)btn.disabled=false;
+  if(e2)return toast('Bayaran disimpan tapi status resit gagal dikemaskini: '+friendly(e2),'err');
+  await logAudit('consign_payments_ins',paymentNo+' — '+r.receiptNo+' — RM '+window._consignPaymentTotal.toFixed(2));
+  closeModal();await sync();render();
+  toast('Bayaran '+paymentNo+' disimpan \xe2\x9c\x94','ok');
+  // Auto-open receipt download
+  setTimeout(()=>{
+    const p=(DB.consignPayments||[]).find(x=>x.paymentNo===paymentNo);
+    if(p)printConsignPayment(p.id);
+  },500);
+}
+
+// ===== PDF RECEIPT (uses existing printArea mechanism) =====
+function printConsignPayment(paymentId){
+  const p=(DB.consignPayments||[]).find(x=>x.id===paymentId);
+  if(!p)return toast('Bayaran tidak dijumpai','err');
+  const c=consignorOf(p.consignorId);
+  const r=(DB.consignReceipts||[]).find(x=>x.id===p.receiptId);
+  const items=p.lineItems||[];
+  const methodLabel=p.paymentMethod==='bank_transfer'?'Pemindahan Bank':p.paymentMethod==='cash'?'Tunai':p.paymentMethod==='cheque'?'Cek':'Lain-lain';
+  const html='<div class="payslip" style="font-family:Arial,sans-serif">'+
+    '<h2 style="text-align:center;margin:0 0 4px">Soobeh TBG</h2>'+
+    '<p style="text-align:center;margin:0 0 14px;font-size:13px;opacity:.8">Resit Bayaran Consignment</p>'+
+    '<div style="display:flex;justify-content:space-between;margin:14px 0;padding:8px 0;border-top:2px solid #000;border-bottom:1px solid #000">'+
+    '<div><b>No. Bayaran:</b> '+esc(p.paymentNo)+'<br><b>Tarikh:</b> '+dShort(p.paymentDate)+'</div>'+
+    '<div style="text-align:right"><b>Kaedah:</b> '+methodLabel+'<br><b>Akaun:</b> '+esc(p.bankAccountPaid||'\xe2\x80\x94')+'</div>'+
+    '</div>'+
+    '<div style="margin:8px 0"><b>Kepada Syarikat:</b> '+esc(c?c.name:'—')+' ('+esc(c?c.code:'—')+')<br>'+
+    (c&&c.bankAccount?'<b>Bank/Akaun:</b> '+esc(c.bankName||'')+' / '+esc(c.bankAccount)+'<br>':'')+
+    (r?'<b>Untuk Resit:</b> '+esc(r.receiptNo)+' (diterima '+dShort(r.receivedDate)+')<br>':'')+
+    '</div>'+
+    '<table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:13px">'+
+    '<tr style="background:#f3f3f3"><th style="border:1px solid #999;padding:8px;text-align:left">Produk</th>'+
+    '<th style="border:1px solid #999;padding:8px;text-align:right">Kuantiti</th>'+
+    '<th style="border:1px solid #999;padding:8px;text-align:right">Harga/Unit</th>'+
+    '<th style="border:1px solid #999;padding:8px;text-align:right">Jumlah</th></tr>'+
+    items.map(it=>'<tr>'+
+      '<td style="border:1px solid #999;padding:8px">'+esc(it.name)+(it.code?' ('+esc(it.code)+')':'')+'</td>'+
+      '<td style="border:1px solid #999;padding:8px;text-align:right">'+it.quantity+'</td>'+
+      '<td style="border:1px solid #999;padding:8px;text-align:right">RM '+(+it.unit_cost).toFixed(2)+'</td>'+
+      '<td style="border:1px solid #999;padding:8px;text-align:right">RM '+(+it.total_cost).toFixed(2)+'</td>'+
+    '</tr>').join('')+
+    '<tr style="font-weight:800;background:#e5e5e5"><td colspan="3" style="border:1px solid #999;padding:10px;text-align:right">JUMLAH BAYARAN</td>'+
+    '<td style="border:1px solid #999;padding:10px;text-align:right">RM '+p.totalAmount.toFixed(2)+'</td></tr>'+
+    '</table>'+
+    (p.notes?'<p style="margin:10px 0;font-size:12px"><b>Nota:</b> '+esc(p.notes)+'</p>':'')+
+    '<div style="margin-top:30px;display:flex;justify-content:space-between;font-size:12px">'+
+    '<div style="text-align:center"><div style="border-top:1px solid #000;width:140px;padding-top:4px;margin-top:30px">Diterima oleh</div></div>'+
+    '<div style="text-align:center"><div style="border-top:1px solid #000;width:140px;padding-top:4px;margin-top:30px">Dibayar oleh (Manager)</div></div>'+
+    '</div>'+
+    '<p style="text-align:center;margin-top:14px;font-size:11px;color:#666">Resit ini dijana oleh Sistem Soobeh TBG pada '+new Date().toLocaleString('ms-MY')+'</p>'+
+    '</div>';
+  const pa=$('#printArea');if(!pa)return;
+  pa.innerHTML=html;
+  pa.style.display='block';
+  // Hide the app temporarily for clean print
+  const app=$('#app');const oldDisplay=app.style.display;app.style.display='none';
+  setTimeout(()=>{
+    window.print();
+    app.style.display=oldDisplay;
+    pa.style.display='none';
+    pa.innerHTML='';
+  },50);
+}
+
 
 /* ---------- 18. BOOT (dengan paparan ralat) ---------- */
 window.addEventListener('error',e=>showFatal(e.message));
