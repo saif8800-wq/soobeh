@@ -218,10 +218,6 @@ details.demo .inner{padding:0 18px 16px}
 /* Consignment module UI — kemas & cantik */
 .consign-view{margin-top:10px}
 
-/* Task dropdown wrap (custom tasks feature) */
-.task-dropdown-wrap{display:flex;gap:8px;align-items:stretch}
-.task-dropdown-wrap select{flex:1;min-width:0}
-.task-dropdown-wrap .btn-sm{flex:none;min-width:42px;font-size:18px;padding:0 10px}
 
 /* Summary stat cards (4-grid) */
 .consign-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 16px}
@@ -1066,7 +1062,7 @@ function openAddStaff(){const me=currentUser();if(!me||!['manager','admin'].incl
   '<label class="field"><span>PIN awal (4–6 digit)</span><input id="nsPin" inputmode="numeric" maxlength="6" placeholder="cth: 5678"></label>'+
   '<label class="field"><span>Kitaran gaji</span><select id="nsCycle"><option value="monthly">Bulanan (1hb – akhir bulan)</option><option value="biweekly">Setiap 2 Minggu (1–14, 15–akhir)</option></select></label>'+
   (me.role==='admin'?'<label class="field"><span>Peranan</span><select id="nsRole"><option value="staff">Staff</option><option value="manager">Manager</option><option value="admin">Admin</option></select></label>':'')+
-  '<button class="btn btn-primary btn-big" onclick="submitAddStaff()">✚ Tambah Akaun Sekarang</button>');}
+  '<button class="btn btn-primary btn-big" onclick="submitAddStaff()">➕ Tambah Akaun Sekarang</button>');}
 async function submitAddStaff(){
   const me=currentUser();if(!me||!['manager','admin'].includes(me.role))return;
   const name=$('#nsName').value.trim(),un=$('#nsUser').value.trim().toLowerCase(),ph=$('#nsPhone').value.trim(),pin=$('#nsPin').value.trim(),cyc=$('#nsCycle').value;
@@ -1649,10 +1645,10 @@ function renderMTasks(){
   '<div class="formgrid">'+
   '<label class="field"><span>Tarikh</span><input type="date" id="atDate" value="'+todayStr()+'" min="'+todayStr()+'" max="'+ymd(new Date(Date.now()+62*864e5))+'"></label>'+
   '<label class="field"><span>Syif</span><select id="atShift"><option value="morning">☀ Pagi (10:00–16:00)</option><option value="evening">🌙 Petang (16:00–22:00)</option></select></label>'+
-  '<label class="field"><span>Tugasan</span><div class="task-dropdown-wrap">'+'<select id="atTpl">'+TASK_TEMPLATES.map(t=>'<option value="'+t.id+'">'+t.ic+' '+esc(t.t)+'</option>').join('')+((DB.customTasks||[]).length?'<option disabled>──────────</option>'+(DB.customTasks||[]).map(t=>'<option value="custom:'+t.id+'">'+t.icon+' '+esc(t.title)+' (Custom)</option>').join(''):'')+'</select>'+'<button class="btn btn-sm btn-primary" onclick="openCustomTaskModal()" title="Tambah tugasan custom">ð</button>'+'</div></label>'+
+  '<label class="field"><span>Tugasan</span><select id="atTpl">'+TASK_TEMPLATES.map(t=>'<option value="'+t.id+'">'+t.ic+' '+esc(t.t)+'</option>').join('')+((DB.customTasks||[]).length?'<option disabled>──────────</option>'+(DB.customTasks||[]).map(t=>'<option value="custom:'+t.id+'">'+t.icon+' '+esc(t.title)+' (Custom)</option>').join(''):'')+'</select></label>'+
   '<label class="field"><span>Arahan tambahan (opsyenal)</span><input id="atNote" placeholder="cth: fokus freezer dulu"></label></div>'+
-  '<button class="btn btn-primary btn-big" onclick="assignTaskSubmit()">✚ Beri Tugasan kepada Staf Syif Ini</button>'+
-  '<p class="hint">Tugasan muncul kepada <b>semua staf yang bertugas</b> pada syif &amp; tarikh tersebut. Staf mesti selesaikan sebelum syif tamat — setiap penghantaran perlu anda <b>acknowledge</b>.</p>'+'<div class="chips" style="margin-top:8px">'+((DB.customTasks||[]).length?'<button class="btn btn-sm ghost" onclick="openCustomTaskListModal()">ð Urus Tugasan Custom ('+(DB.customTasks||[]).length+')</button>':'')+'</div></div>';
+  '<button class="btn btn-primary btn-big" onclick="assignTaskSubmit()">➕ Beri Tugasan kepada Staf Syif Ini</button>'+
+  '<p class="hint">Tugasan muncul kepada <b>semua staf yang bertugas</b> pada syif &amp; tarikh tersebut. Staf mesti selesaikan sebelum syif tamat — setiap penghantaran perlu anda <b>acknowledge</b>.</p>'+'<div class="chips" style="margin-top:8px">'+((DB.customTasks||[]).length?'<button class="btn btn-sm ghost" onclick="openCustomTaskListModal()">📋 Urus Tugasan Custom ('+(DB.customTasks||[]).length+')</button>':'')+'</div></div>';
   const list=DB.tasks.filter(x=>monthKey(x.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
   if(!list.length)html+='<div class="card glass"><p style="opacity:.7">Tiada tugasan pada '+monthLabel(mk)+'.</p></div>';
   list.forEach(x=>{
@@ -2219,7 +2215,7 @@ function renderMStaff(){
   const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
   const search=(ROUTE.staffSearch||'').toLowerCase().trim();
   const filtered=search?list.filter(x=>x.name.toLowerCase().includes(search)||(x.username||'').toLowerCase().includes(search)):list;
-  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">✚ Tambah Akaun</button></div>';
+  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">➕ Tambah Akaun</button></div>';
   // Compact Typhoid toggle (satu baris)
   html+='<div class="card glass staff-toggle-row">'+
   '<div class="info"><b>💉 Elaun Typhoid</b> '+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+
