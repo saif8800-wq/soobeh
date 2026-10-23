@@ -393,7 +393,7 @@ async function loadAll(){
   const dd=await SB.from('deductions').select('*').order('created_at',{ascending:false});
   DB.deductions=(dd.data||[]).map(r=>({id:r.id,staffId:r.staff_id,periodStart:r.period_start,amount:+r.amount,reason:r.reason||'',t:Date.parse(r.created_at)}));
   const att=await SB.from('attendance').select('*').order('date',{ascending:false}).limit(500);
-  DB.attendance=(att.data||[]).map(r=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,punchIn:r.punch_in?Date.parse(r.punch_in):null,punchOut:r.punch_out?Date.parse(r.punch_out):null,late:!!r.late,dist:r.pin_dist!=null?+r.pin_dist:null}));
+  DB.attendance=(att.data||[]).map(r=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,punchIn:r.punch_in?Date.parse(r.punch_in):null,punchOut:r.punch_out?Date.parse(r.punch_out):null,late:!!r.late,dist:r.pin_dist!=null?+r.pin_dist:null,lateOverride:!!r.late_override,overrideReason:r.override_reason||'',overrideBy:r.override_by,overrideAt:r.override_at?Date.parse(r.override_at):null}));
   const tk=await SB.from('tasks').select('*').order('date',{ascending:false}).limit(400);
   DB.tasks=(tk.data||[]).map(r=>({id:r.id,date:r.date,shift:r.shift,template:r.template,note:r.note||'',status:r.status,data:r.data||null,submittedBy:r.submitted_by,submittedAt:r.submitted_at?Date.parse(r.submitted_at):null,late:!!r.late_submit,ackedAt:r.acked_at?Date.parse(r.acked_at):null,t:Date.parse(r.created_at)}));
   if(isMgr){
@@ -517,7 +517,7 @@ function attEligible(staffId,mk){
   if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir'};
   const inv=DB.swaps.filter(s=>{const e=DB.schedule.find(x=>x.id===s.entryId);return e&&monthKey(e.date)===mk&&(s.fromStaffId===staffId||s.toStaffId===staffId)});
   if(inv.length)return {ok:false,why:'Terdapat rekod pertukaran syif'};
-  if(DB.attendance.some(a=>a.staffId===staffId&&monthKey(a.date)===mk&&a.late))return {ok:false,why:'Terdapat rekod punch-in LAMBAT'};
+  if(DB.attendance.some(a=>a.staffId===staffId&&monthKey(a.date)===mk&&a.late&&!a.lateOverride))return {ok:false,why:'Terdapat rekod punch-in LAMBAT (belum diluluskan manager)'};
   return {ok:true,why:''};
 }
 function estimateFor(staffId){
@@ -878,13 +878,13 @@ function renderStaffAttendance(){
     else btn='<div class="notice ok">✔ Syif hari ini lengkap — In '+fmtT(rec.punchIn)+' · Out '+fmtT(rec.punchOut)+'</div>';
     html+='<div class="card glass"><h3>'+(e.shift==='morning'?'☀ Syif Pagi':'🌙 Syif Petang')+' — Hari Ini</h3>'+
     '<div class="detailrow"><span>Syif bermula</span><b>'+startT+'</b></div>'+
-    '<div class="detailrow"><span>Punch In</span><b>'+(rec&&rec.punchIn?fmtT(rec.punchIn)+(rec.late?' <span class="chip chip-warn">LAMBAT</span>':' <span class="chip chip-ok">tepat</span>'):'—')+'</b></div>'+
+    '<div class="detailrow"><span>Punch In</span><b>'+(rec&&rec.punchIn?fmtT(rec.punchIn)+(rec.late?(rec.lateOverride?' <span class="chip chip-ok">✅ Diluluskan</span> <span class="chip chip-warn">(asal LAMBAT)</span>':' <span class="chip chip-warn">LAMBAT</span>'):' <span class="chip chip-ok">tepat</span>'):'—')+'</b></div>'+
     '<div class="detailrow"><span>Punch Out</span><b>'+(rec&&rec.punchOut?fmtT(rec.punchOut):'—')+'</b></div>'+btn+
     '<p class="hint">Butang hanya berfungsi dalam radius '+S.geofenceRadius+'m dari kedai. Punch in selepas '+startT+' = <b>LAMBAT</b> → hilang kelayakan Bonus Kehadiran bulan ini.</p></div>';
   });
   html+='<div class="card glass"><h3>📜 Rekod Kehadiran Bulan Ini ('+mine.length+')</h3>'+
   (mine.length?mine.map(a=>'<div class="brow"><div><b>'+dShort(a.date)+'</b> <span class="chip chip-info">'+(a.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span></div><div class="chips">'+
-  '<span class="chip '+(a.late?'chip-warn':'chip-ok')+'">In '+fmtT(a.punchIn)+(a.late?' ⚠LAMBAT':'')+'</span>'+
+  '<span class="chip '+(a.late&&!a.lateOverride?'chip-warn':'chip-ok')+'">In '+fmtT(a.punchIn)+(a.late?(a.lateOverride?' ✅diluluskan':' ⚠LAMBAT'):'')+'</span>'+
   '<span class="chip'+(a.punchOut?' chip-ok':'')+'">Out '+fmtT(a.punchOut)+'</span></div></div>').join(''):'<p style="opacity:.7">Tiada rekod bulan ini.</p>')+'</div>';
   $('#viewRoot').innerHTML=html;
 }
@@ -1482,20 +1482,21 @@ function renderMReport(){
   '<label class="field"><span>Nama staf</span><select onchange="setReportStaff(this.value)">'+staff.map(s=>'<option value="'+s.id+'"'+(s.id===ROUTE.lrStaff?' selected':'')+'>'+esc(s.name)+' ('+esc(s.username)+')</option>').join('')+'</select></label>';
   if(!rows.length)html+='<p style="opacity:.7">Tiada syif '+esc(sel.name)+' pada '+monthLabel(mk)+'.</p>';
   else{
-    html+='<div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Punch In</th><th>Punch Out</th><th style="text-align:right">Jualan</th></tr>';
+    html+='<div class="tblwrap"><table class="tbl"><tr><th>Tarikh</th><th>Syif</th><th>Punch In</th><th>Punch Out</th><th style="text-align:right">Jualan</th><th></th></tr>';
     rows.forEach(e=>{
       const a=DB.attendance.find(x=>x.staffId===ROUTE.lrStaff&&x.date===e.date&&x.shift===e.shift);
       const sale=getSale(e.date,e.shift);
       html+='<tr><td>'+dShort(e.date)+'</td><td>'+(e.shift==='morning'?'☀ Pagi':'🌙 Petang')+(e.hours!=null?' <span class="chip">'+e.hours+'j</span>':'')+'</td>'+
-      '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?' <span class="chip chip-warn">LAMBAT</span>':''):(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'<span class="chip chip-wait">tiada punch</span>'))+'</td>'+
+      '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?(a.lateOverride?' <span class="chip chip-ok">✅ Diluluskan</span>':' <span class="chip chip-warn">LAMBAT</span>'):''):(e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'<span class="chip chip-wait">tiada punch</span>'))+'</td>'+
       '<td>'+(a&&a.punchOut?fmtT(a.punchOut):'—')+'</td>'+
-      '<td style="text-align:right">'+(sale!=null?rm2(sale):'—')+'</td></tr>';
+      '<td style="text-align:right">'+(sale!=null?rm2(sale):'—')+'</td>'+
+      '<td>'+(a?'<button class="btn btn-sm" onclick="openAttendanceEditModal(\''+a.id+'\')" title="Edit punch / luluskan lewat">✏️</button>':'')+'</td></tr>';
     });
     html+='</table></div>'+
     '<div class="statrow">'+
     '<div class="stat"><small>Total syif</small><b>'+sum.n+'</b></div>'+
     '<div class="stat"><small>Total jam</small><b>'+sum.h+'</b></div>'+
-    '<div class="stat"><small>Punch in</small><b>'+sum.pn+(sum.ln?' <small style="color:#fde68a">('+sum.ln+' lambat)</small>':'')+'</b></div>'+
+    '<div class="stat"><small>Punch in</small><b>'+sum.pn+(sum.ln?' <small style="color:#fde68a">('+sum.ln+' lambat, '+(DB.attendance.filter(a=>a.staffId===ROUTE.lrStaff&&monthKey(a.date)===mk&&a.late&&a.lateOverride).length)+' diluluskan)</small>':'')+'</b></div>'+
     '<div class="stat"><small>TOTAL JUALAN SEBULAN</small><b>'+rm(sum.ts)+'</b></div></div>';
   }
   html+='<button class="btn btn-primary btn-big" onclick="exportStaffReportPDF()">⬇ Export PDF — Staf Ini</button>'+
@@ -3412,6 +3413,93 @@ function openCustomTaskListModal(){
     }).join('');
   }
   openModal('📋 Urus Tugasan Custom',html);
+}
+
+
+/* ---------- 17f. ATTENDANCE EDITOR (Manager) ---------- */
+// Modal edit punch in/out + luluskan lewat (override)
+function openAttendanceEditModal(attId){
+  const me=reqMgr();if(!me)return;
+  const a=DB.attendance.find(x=>x.id===attId);
+  if(!a)return toast('Rekod attendance tidak dijumpai','err');
+  const staff=DB.users.find(u=>u.id===a.staffId);
+  if(!staff)return toast('Staf tidak dijumpai','err');
+  // Convert timestamps to datetime-local format (YYYY-MM-DDTHH:MM)
+  const toDTLocal=ts=>{
+    if(!ts)return '';
+    const d=new Date(ts);
+    const pad=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+  };
+  const pinVal=toDTLocal(a.punchIn);
+  const poutVal=toDTLocal(a.punchOut);
+  const shiftLabel=a.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)';
+  let html='<div class="detailrow"><span>Staf</span><b>'+esc(staff.name)+'</b></div>'+
+    '<div class="detailrow"><span>Tarikh &amp; Syif</span><b>'+dShort(a.date)+' · '+shiftLabel+'</b></div>'+
+    (a.dist!=null?'<div class="detailrow"><span>Jarak punch</span><b>'+a.dist+'m dari kedai</b></div>':'')+
+    '<div class="detailrow"><span>Status semasa</span><b>'+(a.late?'<span class="chip chip-warn">⚠ LAMBAT</span>':'<span class="chip chip-ok">✔ Tepat</span>')+(a.lateOverride?' <span class="chip chip-ok">✅ Diluluskan</span>':'')+'</b></div>'+
+
+    '<h3 style="margin-top:14px">⏱ Edit Masa Punch</h3>'+
+    '<label class="field"><span>🟢 Punch In</span><input type="datetime-local" id="aePunchIn" value="'+pinVal+'"></label>'+
+    '<label class="field"><span>🔴 Punch Out</span><input type="datetime-local" id="aePunchOut" value="'+poutVal+'"></label>'+
+    '<p class="hint">💡 Kosongkan salah satu untuk padam rekod punch (cth: kalau punch silap). Format masa: 24-jam.</p>'+
+
+    '<h3 style="margin-top:14px">✅ Luluskan Lewat</h3>'+
+    '<label class="chk"><input type="checkbox" id="aeOverride" '+(a.lateOverride?'checked':'')+'> Luluskan kelewatan punch (override)</label>'+
+    '<label class="field"><span>📝 Sebab override <small>(wajib kalau luluskan)</small></span>'+
+    '<textarea id="aeReason" rows="3" placeholder="cth: Staf kerja 2 syif (pagi+petang) hari ini, punch out pagi &amp; punch in petang overlap menyebabkan rekod lewat">'+esc(a.overrideReason||'')+'</textarea></label>'+
+    '<p class="hint">⚠ Bila luluskan, rekod ini tidak akan menjejaskan kelayakan Bonus Kehadiran staf bulan ini.</p>'+
+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-primary btn-big" onclick="saveAttendanceEdit(\''+a.id+'\')">💾 Simpan</button>'+
+    '<button class="btn ghost" onclick="closeModal()">✕ Batal</button>'+
+    '</div>';
+  openModal('✏️ Edit Attendance — '+esc(staff.name),html);
+}
+
+async function saveAttendanceEdit(attId){
+  const me=reqMgr();if(!me)return;
+  const a=DB.attendance.find(x=>x.id===attId);
+  if(!a)return toast('Rekod tidak dijumpai','err');
+  const staff=DB.users.find(u=>u.id===a.staffId);
+  if(!staff)return toast('Staf tidak dijumpai','err');
+  const pinVal=($('#aePunchIn')||{}).value||'';
+  const poutVal=($('#aePunchOut')||{}).value||'';
+  const override=!!$('#aeOverride').checked;
+  const reason=($('#aeReason')||{}).value||'';
+  // Validate: kalau override=true, reason mesti ada
+  if(override&&!reason.trim())return toast('Sebab override wajib diisi','err');
+  // Validate: punch out mesti selepas punch in (kalau kedua-dua ada)
+  if(pinVal&&poutVal){
+    const pin=new Date(pinVal).getTime();
+    const pout=new Date(poutVal).getTime();
+    if(pout<pin)return toast('Punch Out mesti selepas Punch In','err');
+  }
+  // Build payload
+  const payload={
+    punch_in:pinVal?new Date(pinVal).toISOString():null,
+    punch_out:poutVal?new Date(poutVal).toISOString():null,
+    late_override:override,
+    override_reason:reason.trim(),
+    override_by:me.id,
+    override_at:new Date().toISOString()
+  };
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {error}=await SB.from('attendance').update(payload).eq('id',attId);
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  // Audit log
+  const action=override?'attendance_override_approve':'attendance_edit';
+  const detail=staff.username+' · '+dShort(a.date)+' '+(a.shift==='morning'?'Pagi':'Petang')+
+    (override?(' · Luluskan lewat: '+reason.trim()):' · Edit punch in/out');
+  await logAudit(action,detail);
+  closeModal();await sync();render();
+  toast('Attendance dikemaskini ✔','ok');
+}
+
+// Helper: dapatkan attendance record untuk row (untuk guna di Laporan tab)
+function attFor(staffId,date,shift){
+  return DB.attendance.find(x=>x.staffId===staffId&&x.date===date&&x.shift===shift);
 }
 
 
