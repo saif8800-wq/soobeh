@@ -3485,7 +3485,8 @@ async function saveAttendanceEdit(attId){
     override_at:new Date().toISOString()
   };
   const btn=event&&event.target;if(btn)btn.disabled=true;
-  const {error}=await SB.from('attendance').update(payload).eq('id',attId);
+  // Use RPC function (security definer) - direct UPDATE blocked by RLS
+  const {error}=await SB.rpc('manager_update_attendance',{p_att_id:attId,p_punch_in:payload.punch_in,p_punch_out:payload.punch_out,p_late_override:payload.late_override,p_override_reason:payload.override_reason});
   if(btn)btn.disabled=false;
   if(error)return toast(friendly(error),'err');
   // Audit log
