@@ -218,6 +218,11 @@ details.demo .inner{padding:0 18px 16px}
 /* Consignment module UI — kemas & cantik */
 .consign-view{margin-top:10px}
 
+/* Task dropdown wrap (custom tasks feature) */
+.task-dropdown-wrap{display:flex;gap:8px;align-items:stretch}
+.task-dropdown-wrap select{flex:1;min-width:0}
+.task-dropdown-wrap .btn-sm{flex:none;min-width:42px;font-size:18px;padding:0 10px}
+
 /* Summary stat cards (4-grid) */
 .consign-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 16px}
 .stat-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px}
@@ -350,7 +355,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[]}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[]}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -423,6 +428,9 @@ async function loadAll(){
     }else{
       DB.consignReceiptItems=[];DB.consignPayments=[];
     }
+    // Custom tasks (manager)
+    const ct=await SB.from('custom_tasks').select('*').order('created_at',{ascending:false}).limit(200);
+    DB.customTasks=(ct.data||[]).map(mapCustomTask);
   }
 }
 async function sync(){await loadAll()}
@@ -1557,7 +1565,7 @@ const TASK_TEMPLATES=[
  {id:'cleaning',ic:'🧽',t:'Total Cleaning',items:['Pembersihan menyeluruh kawasan kiosk','Dinding dimopkan','Sawang dibuang']},
  {id:'grease',ic:'🪣',t:'Grease Trap',items:['Sauk jelly','Ceduk air sampai kering','Bersihkan pakai berus','Lap pakai kain','Buang sisa dalam plastik sampah']}
 ];
-function tplOf(k){return TASK_TEMPLATES.find(x=>x.id===k)}
+function tplOf(k){return tplOfExtended(k)}
 const TASK_ST={assigned:['Belum Selesai','chip-wait'],submitted:['Dihantar','chip-info'],done:['Selesai ✔','chip-ok']};
 function staffOnShift(ds,sh){
   const ids=new Set();
@@ -1641,10 +1649,10 @@ function renderMTasks(){
   '<div class="formgrid">'+
   '<label class="field"><span>Tarikh</span><input type="date" id="atDate" value="'+todayStr()+'" min="'+todayStr()+'" max="'+ymd(new Date(Date.now()+62*864e5))+'"></label>'+
   '<label class="field"><span>Syif</span><select id="atShift"><option value="morning">☀ Pagi (10:00–16:00)</option><option value="evening">🌙 Petang (16:00–22:00)</option></select></label>'+
-  '<label class="field"><span>Tugasan</span><select id="atTpl">'+TASK_TEMPLATES.map(t=>'<option value="'+t.id+'">'+t.ic+' '+esc(t.t)+'</option>').join('')+'</select></label>'+
+  '<label class="field"><span>Tugasan</span><div class="task-dropdown-wrap">'+'<select id="atTpl">'+TASK_TEMPLATES.map(t=>'<option value="'+t.id+'">'+t.ic+' '+esc(t.t)+'</option>').join('')+((DB.customTasks||[]).length?'<option disabled>──────────</option>'+(DB.customTasks||[]).map(t=>'<option value="custom:'+t.id+'">'+t.icon+' '+esc(t.title)+' (Custom)</option>').join(''):'')+'</select>'+'<button class="btn btn-sm btn-primary" onclick="openCustomTaskModal()" title="Tambah tugasan custom">ð</button>'+'</div></label>'+
   '<label class="field"><span>Arahan tambahan (opsyenal)</span><input id="atNote" placeholder="cth: fokus freezer dulu"></label></div>'+
   '<button class="btn btn-primary btn-big" onclick="assignTaskSubmit()">✚ Beri Tugasan kepada Staf Syif Ini</button>'+
-  '<p class="hint">Tugasan muncul kepada <b>semua staf yang bertugas</b> pada syif &amp; tarikh tersebut. Staf mesti selesaikan sebelum syif tamat — setiap penghantaran perlu anda <b>acknowledge</b>.</p></div>';
+  '<p class="hint">Tugasan muncul kepada <b>semua staf yang bertugas</b> pada syif &amp; tarikh tersebut. Staf mesti selesaikan sebelum syif tamat — setiap penghantaran perlu anda <b>acknowledge</b>.</p>'+'<div class="chips" style="margin-top:8px">'+((DB.customTasks||[]).length?'<button class="btn btn-sm ghost" onclick="openCustomTaskListModal()">ð Urus Tugasan Custom ('+(DB.customTasks||[]).length+')</button>':'')+'</div></div>';
   const list=DB.tasks.filter(x=>monthKey(x.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
   if(!list.length)html+='<div class="card glass"><p style="opacity:.7">Tiada tugasan pada '+monthLabel(mk)+'.</p></div>';
   list.forEach(x=>{
@@ -3291,6 +3299,123 @@ function printConsignPayment(paymentId){
     pa.style.display='none';
     pa.innerHTML='';
   },50);
+}
+
+
+/* ---------- 17e. CUSTOM TASKS (Manager) ---------- */
+// Mapper untuk custom_tasks dari Supabase
+const mapCustomTask=r=>({id:r.id,code:r.code,icon:r.icon||'📋',title:r.title,items:r.items||[],inputs:r.inputs||[],active:r.active!==false,createdBy:r.created_by,createdAt:Date.parse(r.created_at)});
+
+// Helper: cari custom task ikut id
+function customTaskOf(id){
+  if(!id)return null;
+  return (DB.customTasks||[]).find(t=>t.id===id)||null;
+}
+
+// Helper: dapatkan template (predefined ATAU custom) ikut key
+// Custom task key format: "custom:<uuid>"
+function tplOfExtended(k){
+  if(!k)return null;
+  if(k.startsWith('custom:')){
+    const id=k.slice(7);
+    const ct=customTaskOf(id);
+    if(!ct)return null;
+    return {id:k,ic:ct.icon,t:ct.title,items:ct.items||[],inputs:ct.inputs||[],isCustom:true,ctId:ct.id};
+  }
+  return TASK_TEMPLATES.find(x=>x.id===k);
+}
+
+// Buka modal tambah/edit tugasan custom
+function openCustomTaskModal(id){
+  const ct=id?customTaskOf(id):null;
+  const suggestCode='CT'+String((DB.customTasks||[]).length+1).padStart(3,'0');
+  const html='<div class="formgrid">'+
+    '<label class="field"><span>🏷️ Kod (auto)</span><input id="ctCode" value="'+(ct?esc(ct.code):suggestCode)+'"></label>'+
+    '<label class="field"><span>📋 Icon (emoji)</span><input id="ctIcon" value="'+(ct?esc(ct.icon):'📋')+'" placeholder="cth: 📋 🧽 ❄️ 📱" maxlength="4"></label>'+
+    '</div>'+
+    '<label class="field"><span>📝 Tajuk Tugasan *</span><input id="ctTitle" value="'+(ct?esc(ct.title):'')+'" placeholder="cth: Susun Packaging Baru"></label>'+
+    '<label class="field"><span>✅ Senarai Item <small>(satu per baris — staf akan nampak sebagai checkbox)</small></span><textarea id="ctItems" rows="6" placeholder="Susun packaging mengikut jenis&#10;Check kualiti packaging&#10;Report ke manager kalau rosak">'+(ct?(ct.items||[]).map(esc).join('\n'):'')+'</textarea></label>'+
+    '<p class="hint">💡 Setiap baris dalam senarai item akan jadi satu checkbox yang staf boleh tanda bila dah siap.</p>'+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-primary btn-big" onclick="saveCustomTask('+(ct?'\''+ct.id+'\'':'null')+')">💾 Simpan</button>'+
+    '<button class="btn ghost" onclick="closeModal()">✕ Batal</button>'+
+    (ct?'<button class="btn btn-danger" onclick="deleteCustomTask(\''+ct.id+'\')">🗑 Padam</button>':'')+
+    '</div>';
+  openModal((ct?'✏️ Edit Tugasan Custom':'➕ Tambah Tugasan Custom'),html);
+}
+
+// Simpan custom task baru/edited
+async function saveCustomTask(id){
+  const me=reqMgr();if(!me)return;
+  const code=($('#ctCode')||{}).value||'';
+  const icon=($('#ctIcon')||{}).value||'📋';
+  const title=($('#ctTitle')||{}).value||'';
+  const itemsText=($('#ctItems')||{}).value||'';
+  if(!code.trim())return toast('Kod wajib diisi','err');
+  if(!title.trim())return toast('Tajuk wajib diisi','err');
+  if(title.trim().length<3)return toast('Tajuk terlalu pendek (mesti 3+ aksara)','err');
+  // Parse items (satu per baris, abaikan baris kosong)
+  const items=itemsText.split('\n').map(s=>s.trim()).filter(s=>s.length>0);
+  if(items.length===0)return toast('Sekurang-kurangnya 1 item diperlukan','err');
+  const payload={
+    code:code.trim(),
+    icon:icon.trim()||'📋',
+    title:title.trim(),
+    items:items
+  };
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  let result;
+  if(id){
+    result=await SB.from('custom_tasks').update(payload).eq('id',id);
+  }else{
+    payload.created_by=ME.id;
+    payload.active=true;
+    payload.inputs=[];
+    result=await SB.from('custom_tasks').insert(payload);
+  }
+  if(btn)btn.disabled=false;
+  if(result.error)return toast(friendly(result.error),'err');
+  await logAudit(id?'custom_task_upd':'custom_task_ins',code.trim()+' — '+title.trim());
+  closeModal();await sync();render();
+  toast('Tugasan custom disimpan ✔','ok');
+}
+
+// Padam (soft delete — set active=false) custom task
+async function deleteCustomTask(id){
+  const me=reqMgr();if(!me)return;
+  const ct=customTaskOf(id);if(!ct)return;
+  if(!confirm('Padam tugasan custom "'+ct.title+'"?\n\nTugasan yang dah di-assign sebelum ini tidak terjejas — hanya dropdown masa depan.'))return;
+  const {error}=await SB.from('custom_tasks').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('custom_task_del',ct.code+' — '+ct.title);
+  closeModal();await sync();render();
+  toast('Tugasan custom dibuang ✔','ok');
+}
+
+// Buka modal senarai semua custom tasks (untuk urus/edit/padam)
+function openCustomTaskListModal(){
+  const me=reqMgr();if(!me)return;
+  const list=(DB.customTasks||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
+  let html='<div class="chips" style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="closeModal();openCustomTaskModal()">➕ Tambah Custom</button></div>';
+  if(!list.length){
+    html+='<div class="empty-state empty-state-sm"><div class="empty-ic">📋</div><h3>Belum Ada Tugasan Custom</h3><p>Tambah satu untuk mula.</p></div>';
+  }else{
+    html+=list.map(ct=>{
+      const useCount=(DB.tasks||[]).filter(t=>t.template==='custom:'+ct.id).length;
+      return '<div class="card glass"><div class="brow"><div><b>'+esc(ct.icon)+' '+esc(ct.title)+'</b> <span class="chip">'+esc(ct.code)+'</span>'+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-info">'+(ct.items||[]).length+' item</span>'+
+        (useCount?'<span class="chip chip-ok">'+useCount+' kali diguna</span>':'<span class="chip">belum pernah diguna</span>')+
+        '</div>'+
+        (ct.items&&ct.items.length?'<ul style="margin:6px 0 0;padding-left:20px;opacity:.7;font-size:13px">'+ct.items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>':'')+
+        '</div>'+
+        '<div class="brow-act">'+
+        '<button class="btn btn-sm btn-primary" onclick="closeModal();openCustomTaskModal(\''+ct.id+'\')">✏️ Edit</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="closeModal();openCustomTaskModal(\''+ct.id+'\');setTimeout(()=>deleteCustomTask(\''+ct.id+'\'),300)">🗑 Padam</button>'+
+        '</div></div></div>';
+    }).join('');
+  }
+  openModal('📋 Urus Tugasan Custom',html);
 }
 
 
