@@ -1079,6 +1079,18 @@ async function submitAddStaff(){
   if(invErr)return toast('Fungsi tidak dapat dipanggil: '+(invErr.message||invErr)+' — pastikan Edge Function "create-soobeh-user" telah dicipta di Supabase.','err');
   if(!res)return toast('Tiada respons dari server fungsi','err');
   if(res.error)return toast(res.error,'err');
+  // Auto-assign offer letter to new staff
+  const nsIC=($('#nsIC')||{}).value||'';
+  const nsBank=($('#nsBank')||{}).value||'';
+  if(nsIC.trim()&&nsBank.trim()){
+    try{
+      const userId=res.user_id||res.id;
+      if(userId){
+        const agr=await SB.rpc('assign_offer_letter',{p_staff_id:userId,p_ic:nsIC.trim(),p_bank_account:nsBank.trim()});
+        if(!agr.error)await logAudit('offer_letter_auto_assign','Auto-assigned to '+un);
+      }
+    }catch(e){}
+  }
   await logAudit('user_add',un+' ('+role+') — auto');
   closeModal();await sync();render();
   openModal('✅ Akaun Dicipta',
@@ -2277,6 +2289,7 @@ function openStaffManage(id){
   '<div class="detailrow"><span>Status Perkahwinan</span><b>'+(x.maritalStatus?'<span class="chip chip-info">'+esc(MARITAL_LB[x.maritalStatus]||x.maritalStatus)+'</span>':'— belum diisi')+'</b></div>'+
   '<div class="detailrow"><span>Kitaran Gaji</span><b>'+cycleLabel+'</b></div>'+
   '<div class="detailrow"><span>Elaun Typhoid</span><b>'+x.typhoidCount+'/'+DB.settings.typhoidMax+' kali dibayar</b></div>'+
+  offerLetterSectionHTML(x.id)+
   '<h3 style="margin-top:20px">⚡ Tindakan</h3>'+
   '<div class="action-grid">'+
   '<button class="btn btn-primary" onclick="closeModal();openEditProfile(\''+x.id+'\')"><span class="ic">✏️</span>Edit Profil</button>'+
@@ -3501,6 +3514,35 @@ async function saveAttendanceEdit(attId){
 // Helper: dapatkan attendance record untuk row (untuk guna di Laporan tab)
 function attFor(staffId,date,shift){
   return DB.attendance.find(x=>x.staffId===staffId&&x.date===date&&x.shift===shift);
+}
+
+
+/* ---------- 17g. OFFER LETTER MODULE (helper) ---------- */
+// Helper: HTML untuk offer letter section dalam openStaffManage
+function offerLetterSectionHTML(staffId){
+  const agr=offerLetterOf(staffId);
+  if(!agr){
+    return '<div class="detailrow"><span>Status</span><b><span class="chip chip-no">— Belum Diberi</span></b></div>'+
+      '<div class="chips" style="margin-top:6px"><button class="btn btn-sm btn-primary" onclick="closeModal();openAssignOfferLetterModal(\''+staffId+'\')">📄 Berikan Offer Letter</button></div>';
+  }
+  if(agr.agreedAt){
+    const dt=new Date(agr.agreedAt);
+    const dateStr=dt.toLocaleDateString('ms-MY');
+    const timeStr=dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="detailrow"><span>Status</span><b><span class="chip chip-ok">✅ Sudah Bersetuju</span></b></div>'+
+      '<div class="detailrow"><span>Tarikh Setuju</span><b>'+dateStr+' '+timeStr+'</b></div>'+
+      (agr.agreementIp?'<div class="detailrow"><span>IP</span><b>'+esc(agr.agreementIp)+'</b></div>':'')+
+      '<div class="chips" style="margin-top:6px">'+
+      '<button class="btn btn-sm" onclick="closeModal();openOfferLetterModal(\''+agr.id+'\')">👁️ Lihat</button>'+
+      '<button class="btn btn-sm" onclick="closeModal();printOfferLetter(\''+agr.id+'\')">🖨️ PDF</button>'+
+      '</div>';
+  }
+  // Pending
+  return '<div class="detailrow"><span>Status</span><b><span class="chip chip-wait">⏳ Menunggu Persetujuan</span></b></div>'+
+    '<div class="detailrow"><span>Tarikh Assign</span><b>'+new Date(agr.assignedAt).toLocaleDateString('ms-MY')+'</b></div>'+
+    '<div class="chips" style="margin-top:6px">'+
+    '<button class="btn btn-sm" onclick="closeModal();openOfferLetterModal(\''+agr.id+'\')">👁️ Lihat (Manager)</button>'+
+    '</div>';
 }
 
 
