@@ -3517,6 +3517,297 @@ function attFor(staffId,date,shift){
 }
 
 
+/* ---------- 17g. OFFER LETTER MODULE ---------- */
+// Mapper
+const mapOfferLetterAgreement=r=>({
+  id:r.id,
+  staffId:r.staff_id,
+  staffSnapshot:r.staff_snapshot||{},
+  letterContentSnapshot:r.letter_content_snapshot||'',
+  assignedAt:r.assigned_at?Date.parse(r.assigned_at):null,
+  assignedBy:r.assigned_by,
+  agreedAt:r.agreed_at?Date.parse(r.agreed_at):null,
+  agreementIp:r.agreement_ip||''
+});
+
+// Helper: cari agreement untuk staff
+function offerLetterOf(staffId){
+  return (DB.offerLetterAgreements||[]).find(a=>a.staffId===staffId)||null;
+}
+
+// Helper: dapatkan staff snapshot fields
+function snapField(agreement, field){
+  if(!agreement||!agreement.staffSnapshot)return '';
+  return agreement.staffSnapshot[field]||'';
+}
+
+// ===== STAFF SIDE: profil tab — show offer letter status =====
+function offerLetterStatusHTML(){
+  const me=currentUser();
+  if(!me||me.role!=='staff')return '';
+  const agr=offerLetterOf(me.id);
+  if(!agr){
+    return '<div class="card glass"><h3>📄 Offer Letter</h3>'+
+      '<p class="hint">Tiada offer letter buat masa ini. Hubungi manager jika anda perlukan satu.</p></div>';
+  }
+  if(agr.agreedAt){
+    const dt=new Date(agr.agreedAt);
+    return '<div class="card glass offer-letter-agreed"><h3>✅ Offer Letter — Sudah Bersetuju</h3>'+
+      '<p>Anda telah bersetuju dengan terma &amp; syarat offer letter pada:</p>'+
+      '<div class="detailrow"><span>Tarikh &amp; Masa</span><b>'+dt.toLocaleDateString('ms-MY')+' '+dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'})+'</b></div>'+
+      '<div class="detailrow"><span>Status</span><b><span class="chip chip-ok">🔒 LOCKED — Tak Boleh Ubah</span></b></div>'+
+      (agr.agreementIp?'<div class="detailrow"><span>IP Address</span><b>'+esc(agr.agreementIp)+'</b></div>':'')+
+      '<div class="chips" style="margin-top:10px"><button class="btn btn-primary" onclick="openOfferLetterModal(\''+agr.id+'\')">📄 Lihat Offer Letter</button>'+
+      '<button class="btn" onclick="printOfferLetter(\''+agr.id+'\')">🖨️ Muat Turun PDF</button></div></div>';
+  }
+  // Pending
+  return '<div class="card glass offer-letter-pending"><h3>⏳ Offer Letter — Menunggu Persetujuan</h3>'+
+    '<div class="notice warn">Anda ada offer letter yang perlu disemak &amp; disetujui. Sila baca dengan teliti sebelum bersetuju.</div>'+
+    '<div class="chips" style="margin-top:10px"><button class="btn btn-primary btn-big" onclick="openOfferLetterModal(\''+agr.id+'\')">📄 Baca &amp; Setuju Sekarang</button></div></div>';
+}
+
+// ===== MODAL: Buka offer letter (staff: baca + agree; manager: read-only) =====
+function openOfferLetterModal(agreementId){
+  const agr=(DB.offerLetterAgreements||[]).find(a=>a.id===agreementId);
+  if(!agr)return toast('Agreement tidak dijumpai','err');
+  const me=currentUser();
+  if(!me)return;
+  const isOwner=(agr.staffId===me.id);
+  const isMgr=['manager','admin'].includes(me.role);
+  if(!isOwner&&!isMgr)return toast('Akses ditolak','err');
+  const agreed=!!agr.agreedAt;
+  let body=agr.letterContentSnapshot||'<p>Offer letter content tidak dijumpai.</p>';
+  // Replace {{agreed_at}} and {{assigned_at}} placeholders
+  if(agreed){
+    const dt=new Date(agr.agreedAt);
+    body=body.replace(/\{\{agreed_at\}\}/g,dt.toLocaleDateString('ms-MY')+' '+dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'}));
+  }else{
+    body=body.replace(/\{\{agreed_at\}\}/g,'_______________');
+  }
+  if(agr.assignedAt){
+    const dt=new Date(agr.assignedAt);
+    body=body.replace(/\{\{assigned_at\}\}/g,dt.toLocaleDateString('ms-MY'));
+  }else{
+    body=body.replace(/\{\{assigned_at\}\}/g,'_______________');
+  }
+  // Style for dark theme — but offer letter should be light (paper-like)
+  body='<div style="background:#fff;color:#000;padding:24px;border-radius:8px;max-height:65vh;overflow-y:auto;'+
+    'font-family:\'Times New Roman\',serif;line-height:1.6;">'+body+'</div>';
+  // Footer: agree checkbox (only for owner + not agreed yet)
+  let footer='';
+  if(isOwner&&!agreed){
+    footer='<div style="margin-top:14px;padding:14px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.45);border-radius:14px">'+
+      '<label class="chk" style="font-size:15px"><input type="checkbox" id="olAgreeChk"> '+
+      '<span>Saya <b>'+esc(me.name)+'</b> (IC: '+esc(snapField(agr,'ic_number')||'—')+') '+
+      'telah membaca, faham, dan <b>BERSETUJU</b> dengan semua terma &amp; syarat yang dinyatakan dalam '+
+      'offer letter ini. Saya maklum bahawa setelah setuju, persetujuan adalah <b>KEKAL &amp; TIDAK BOLEH DIBATALKAN</b>.</span></label>'+
+      '<div class="chips" style="margin-top:10px"><button class="btn btn-primary btn-big" onclick="submitOfferLetterAgreement(\''+agr.id+'\')">✅ Sahkan Persetujuan</button>'+
+      '<button class="btn ghost" onclick="closeModal()">Baca Lagi / Batal</button></div>'+
+      '<p class="hint" style="margin-top:8px">⚠️ Tindakan ini akan rekod tarikh, masa, dan IP address anda. Tidak boleh diundur.</p>'+
+      '</div>';
+  }else if(isOwner&&agreed){
+    const dt=new Date(agr.agreedAt);
+    footer='<div class="notice ok" style="margin-top:14px">✅ Anda telah bersetuju pada <b>'+dt.toLocaleDateString('ms-MY')+' '+
+      dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'})+'</b>. '+
+      'Persetujuan ini <b>LOCKED</b> dan tidak boleh diundur.'+
+      (agr.agreementIp?'<br>IP: '+esc(agr.agreementIp):'')+'</div>'+
+      '<div class="chips" style="margin-top:8px"><button class="btn" onclick="printOfferLetter(\''+agr.id+'\')">🖨️ Muat Turun PDF</button>'+
+      '<button class="btn ghost" onclick="closeModal()">Tutup</button></div>';
+  }else if(isMgr){
+    if(agreed){
+      const dt=new Date(agr.agreedAt);
+      footer='<div class="notice ok" style="margin-top:14px">✅ Staf telah bersetuju pada <b>'+dt.toLocaleDateString('ms-MY')+' '+
+        dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'})+'</b>.'+
+        (agr.agreementIp?'<br>IP: '+esc(agr.agreementIp):'')+'</div>';
+    }else{
+      footer='<div class="notice warn" style="margin-top:14px">⏳ Staf BELUM bersetuju. Offer letter di-assign pada '+
+        new Date(agr.assignedAt).toLocaleDateString('ms-MY')+'.</div>';
+    }
+    footer+='<div class="chips" style="margin-top:8px"><button class="btn" onclick="printOfferLetter(\''+agr.id+'\')">🖨️ Muat Turun PDF</button>'+
+      '<button class="btn ghost" onclick="closeModal()">Tutup</button></div>';
+  }
+  body=body+footer;
+  const title=agreed?'📄 Offer Letter (Sudah Bersetuju)':'📄 Offer Letter (Pending Persetujuan)';
+  openModal(title,body);
+}
+
+// ===== STAFF: Submit agreement (RPC) =====
+async function submitOfferLetterAgreement(agreementId){
+  const me=currentUser();if(!me)return;
+  const chk=$('#olAgreeChk');
+  if(!chk||!chk.checked)return toast('Sila tick "Saya bersetuju" dahulu','err');
+  if(!confirm('Pasti? Selepas sah, persetujuan TIDAK BOLEH diundur.'))return;
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  // Get user IP (opsyenal, best-effort)
+  let userIp='';
+  try{
+    const r=await fetch('https://api.ipify.org?format=json');
+    const j=await r.json();
+    userIp=j.ip||'';
+  }catch(e){}
+  const {error}=await SB.rpc('agree_offer_letter',{p_agreement_id:agreementId,p_ip:userIp});
+  if(btn)btn.disabled=false;
+  if(error){
+    const m=(error.message||'')+'';;
+    if(/sudah bersetuju/i.test(m))return toast('Anda dah bersetuju sebelum ini','err');
+    return toast(friendly(error),'err');
+  }
+  await logAudit('offer_letter_agree_self','Agreement '+agreementId);
+  closeModal();await sync();render();
+  toast('Persetujuan disahkan ✔ — Tidak boleh diundur','ok');
+}
+
+// ===== MANAGER: Assign offer letter to existing staff =====
+function openAssignOfferLetterModal(staffId){
+  const me=reqMgr();if(!me)return;
+  const s=DB.users.find(u=>u.id===staffId);
+  if(!s)return toast('Staf tidak dijumpai','err');
+  if(s.role!=='staff')return toast('Hanya staff boleh diberi offer letter','err');
+  const existing=offerLetterOf(staffId);
+  if(existing&&existing.agreedAt)return toast('Staf ini dah bersetuju — tak boleh assign semula','err');
+  if(existing)return toast('Staf ini dah ada offer letter pending — padam dulu jika perlu','err');
+  const html='<div class="notice info">Anda akan assign offer letter kepada <b>'+esc(s.name)+'</b>. Staf ini akan nampak offer letter dalam tab Profil selepas log masuk.</div>'+
+    '<div class="detailrow"><span>Nama Staf</span><b>'+esc(s.name)+'</b></div>'+
+    '<div class="detailrow"><span>Username</span><b>@'+esc(s.username)+'</b></div>'+
+    '<div class="detailrow"><span>Telefon</span><b>'+esc(s.phone||'—')+'</b></div>'+
+    '<div class="detailrow"><span>Alamat</span><b style="text-align:right;white-space:pre-line">'+esc(s.address||'— belum diisi')+'</b></div>'+
+    '<h3 style="margin-top:14px">📋 Maklumat Tambahan (wajib untuk offer letter)</h3>'+
+    '<label class="field"><span>🪪 No. Kad Pengenalan *</span><input id="olIC" value="'+esc(s.icNumber||'')+'" placeholder="cth: 051103-08-0040"></label>'+
+    '<label class="field"><span>💳 No. Akaun Bank *</span><input id="olBank" value="'+esc(s.bankAccount||'')+'" placeholder="cth: 16601600215841 (RHB BANK)"></label>'+
+    '<p class="hint">Maklumat ini akan diisi ke dalam offer letter &amp; disimpan ke profile staf.</p>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="submitAssignOfferLetter(\''+staffId+'\')">✅ Assign Offer Letter</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button></div>';
+  openModal('📄 Assign Offer Letter — '+esc(s.name),html);
+}
+
+async function submitAssignOfferLetter(staffId){
+  const me=reqMgr();if(!me)return;
+  const ic=($('#olIC')||{}).value||'';
+  const bank=($('#olBank')||{}).value||'';
+  if(!ic.trim())return toast('No. IC wajib diisi','err');
+  if(!bank.trim())return toast('No. akaun bank wajib diisi','err');
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {error}=await SB.rpc('assign_offer_letter',{p_staff_id:staffId,p_ic:ic.trim(),p_bank_account:bank.trim()});
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();
+  toast('Offer letter di-assign ✔ — Staf akan nampak selepas log masuk','ok');
+}
+
+// ===== MANAGER: Bulk assign to all staff without agreement =====
+async function bulkAssignOfferLetter(){
+  const me=reqMgr();if(!me)return;
+  const staffNoAgr=(DB.users||[]).filter(u=>u.role==='staff'&&u.active!==false&&!offerLetterOf(u.id));
+  if(!staffNoAgr.length)return toast('Semua staf dah ada offer letter ✔','ok');
+  if(!confirm('Assign offer letter ke '+staffNoAgr.length+' staf yang belum ada?\n\n'+
+    'Nota: staff yang belum ada IC/bank account dalam profile akan GAGAL assign. '+
+    'Manager perlu isi IC/bank manual untuk staf tersebut.'))return;
+  toast('⏳ Mula bulk assign...','info');
+  let success=0,failed=[];
+  for(const s of staffNoAgr){
+    try{
+      const r=await SB.rpc('assign_offer_letter',{p_staff_id:s.id,p_ic:s.icNumber||'',p_bank_account:s.bankAccount||''});
+      if(r.error){
+        failed.push(s.name+': '+r.error.message);
+      }else{
+        success++;
+      }
+    }catch(e){
+      failed.push(s.name+': '+e.message);
+    }
+  }
+  await sync();render();
+  if(failed.length){
+    toast(success+' berjaya, '+failed.length+' gagal','warn');
+    setTimeout(()=>{
+      alert('Staf yang gagal (perlu isi IC/bank manual):\n\n'+failed.join('\n'));
+    },500);
+  }else{
+    toast(success+' staf berjaya di-assign ✔','ok');
+  }
+}
+
+// ===== MANAGER: Edit offer letter template =====
+function openOfferLetterTemplateEditor(){
+  const me=reqMgr();if(!me)return;
+  const tpl=(DB.offerLetterTemplate||{contentHtml:''});
+  const html='<div class="notice warn">'+
+    '<b>⚠️ AMARAN:</b> Mengubah template akan memberi kesan kepada staff BAHARU sahaja. '+
+    'Staff yang dah di-assign sebelum ini akan kekal dengan versi lama (snapshot).</div>'+
+    '<p class="hint">Placeholders yang boleh guna:</p>'+
+    '<ul class="seclist" style="font-size:13px"><li><code>{{staff_name}}</code> — auto-ganti dengan nama staf</li>'+
+    '<li><code>{{ic_number}}</code> — IC</li>'+
+    '<li><code>{{address}}</code> — alamat</li>'+
+    '<li><code>{{phone}}</code> — telefon</li>'+
+    '<li><code>{{bank_account}}</code> — no akaun bank</li>'+
+    '<li><code>{{agreed_at}}</code> — tarikh/masa persetujuan (auto-ganti bila staff agree)</li>'+
+    '<li><code>{{assigned_at}}</code> — tarikh assign</li></ul>'+
+    '<label class="field"><span>📝 Tajuk Offer Letter</span><input id="olTplTitle" value="'+esc(tpl.title||'Perjanjian Pekerjaan Separuh Masa')+'"></label>'+
+    '<label class="field"><span>📄 Content HTML</span><textarea id="olTplContent" rows="20" style="font-family:monospace;font-size:12px">'+esc(tpl.contentHtml||'')+'</textarea></label>'+
+    '<div class="chips" style="margin-top:14px"><button class="btn btn-primary btn-big" onclick="saveOfferLetterTemplate()">💾 Simpan Template</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button></div>';
+  openModal('✏️ Edit Offer Letter Template',html);
+}
+
+async function saveOfferLetterTemplate(){
+  const me=reqMgr();if(!me)return;
+  const title=($('#olTplTitle')||{}).value||'';
+  const content=($('#olTplContent')||{}).value||'';
+  if(!content.trim())return toast('Content HTML wajib diisi','err');
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  // Upsert (insert or update)
+  const {error}=await SB.from('offer_letter_template').upsert({
+    id:1,
+    title:title.trim(),
+    content_html:content,
+    updated_by:me.id,
+    updated_at:new Date().toISOString()
+  });
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  await logAudit('offer_letter_template_upd','Title: '+title.trim());
+  closeModal();await sync();render();
+  toast('Template disimpan ✔','ok');
+}
+
+// ===== PRINT: Muat turun offer letter sebagai PDF =====
+function printOfferLetter(agreementId){
+  const agr=(DB.offerLetterAgreements||[]).find(a=>a.id===agreementId);
+  if(!agr)return toast('Agreement tidak dijumpai','err');
+  const me=currentUser();if(!me)return;
+  const isOwner=(agr.staffId===me.id);
+  const isMgr=['manager','admin'].includes(me.role);
+  if(!isOwner&&!isMgr)return toast('Akses ditolak','err');
+  const staff=DB.users.find(u=>u.id===agr.staffId);
+  let body=agr.letterContentSnapshot||'<p>Content tidak dijumpai.</p>';
+  // Replace date placeholders
+  if(agr.agreedAt){
+    const dt=new Date(agr.agreedAt);
+    body=body.replace(/\{\{agreed_at\}\}/g,dt.toLocaleDateString('ms-MY')+' '+dt.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'}));
+  }else{
+    body=body.replace(/\{\{agreed_at\}\}/g,'_______________');
+  }
+  if(agr.assignedAt){
+    body=body.replace(/\{\{assigned_at\}\}/g,new Date(agr.assignedAt).toLocaleDateString('ms-MY'));
+  }
+  const html='<div class="payslip" style="color:#000">'+
+    body+
+    '<p class="ps-note" style="margin-top:20px;font-size:10px;color:#666;border-top:1px solid #ccc;padding-top:8px;">'+
+    'Dokumen ini dijana oleh Sistem Soobeh TBG.'+(agr.agreedAt?' Persetujuan direkod secara elektronik pada '+new Date(agr.agreedAt).toLocaleString('ms-MY')+' (IP: '+(agr.agreementIp||'—')+').':' Belum disetujui.')+
+    '</p></div>';
+  const pa=$('#printArea');if(!pa)return;
+  pa.innerHTML=html;
+  pa.style.display='block';
+  const app=$('#app');const oldDisplay=app.style.display;app.style.display='none';
+  setTimeout(()=>{
+    window.print();
+    app.style.display=oldDisplay;
+    pa.style.display='none';
+    pa.innerHTML='';
+  },50);
+}
+
+
 /* ---------- 17g. OFFER LETTER MODULE (helper) ---------- */
 // Helper: HTML untuk offer letter section dalam openStaffManage
 function offerLetterSectionHTML(staffId){
