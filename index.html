@@ -424,10 +424,15 @@ async function loadAll(){
     }else{
       DB.consignReceiptItems=[];DB.consignPayments=[];
     }
-    // Custom tasks (manager)
+    // Custom tasks (manager only)
     const ct=await SB.from('custom_tasks').select('*').order('created_at',{ascending:false}).limit(200);
     DB.customTasks=(ct.data||[]).map(mapCustomTask);
   }
+  // Offer letter (ALL users - staff fetch own via RLS)
+  const olt=await SB.from('offer_letter_template').select('*').eq('id',1).maybeSingle();
+  DB.offerLetterTemplate=olt.data?{title:olt.data.title,contentHtml:olt.data.content_html,updatedAt:Date.parse(olt.data.updated_at)}:null;
+  const ola=await SB.from('offer_letter_agreements').select('*').order('assigned_at',{ascending:false}).limit(200);
+  DB.offerLetterAgreements=(ola.data||[]).map(mapOfferLetterAgreement);
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
