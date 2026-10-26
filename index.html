@@ -3861,9 +3861,9 @@ function openResignStaffModal(staffId){
   if(s.role!=='staff')return toast('Hanya staf boleh diproses berhenti','err');
   if(s.resignedAt)return toast('Staf ini dah diproses berhenti','err');
   // Check if staff has future bookings/schedule
-  const todayStr=todayStr();
-  const futureBookings=DB.bookings.filter(b=>b.staffId===staffId&&b.date>todayStr);
-  const futureSchedule=DB.schedule.filter(e=>e.staffId===staffId&&e.date>todayStr);
+  const todayDate=todayStr();
+  const futureBookings=DB.bookings.filter(b=>b.staffId===staffId&&b.date>todayDate);
+  const futureSchedule=DB.schedule.filter(e=>e.staffId===staffId&&e.date>todayDate);
   const warnMsg=futureBookings.length||futureSchedule.length?
     '⚠ Staf ini ada <b>'+(futureBookings.length+futureSchedule.length)+' rekod</b> (tempahan + jadual) pada masa depan yang akan <b>DIPADAM</b> sepenuhnya. Manager perlu assign staf lain ke slot tersebut selepas ini.':
     'Staf ini tiada rekod kerja masa depan.';
@@ -3879,7 +3879,7 @@ function openResignStaffModal(staffId){
 
     '<h3 style="margin-top:14px">📅 Tarikh Berhenti (hari terakhir kerja)</h3>'+
     '<label class="field"><span>Tarikh Berhenti *</span>'+
-    '<input type="date" id="rsDate" value="'+todayStr+'" min="'+todayStr()+'">'+
+    '<input type="date" id="rsDate" value="'+todayDate+'" min="'+todayDate+'">'+
     '<small style="display:block;margin-top:4px;opacity:.7">Semua tempahan &amp; jadual diluluskan <b>selepas</b> tarikh ini akan dipadam. Staf masih boleh kerja sehingga tarikh ini (inklusif).</small>'+
     '</label>'+
 
