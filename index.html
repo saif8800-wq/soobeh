@@ -355,7 +355,7 @@ function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],pa
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
-const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||'',icNumber:r.ic_number||'',bankAccount:r.bank_account||'',resignedAt:r.resigned_at?Date.parse(r.resigned_at):null,resignationDate:r.resignation_date||null,resignationReason:r.resignation_reason||''});
+const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||'',icNumber:r.ic_number||'',bankName:r.bank_name||'',bankAccount:r.bank_account||'',resignedAt:r.resigned_at?Date.parse(r.resigned_at):null,resignationDate:r.resignation_date||null,resignationReason:r.resignation_reason||'',emergencyName:r.emergency_name||'',emergencyRelationship:r.emergency_relationship||'',emergencyAddress:r.emergency_address||'',emergencyPhone:r.emergency_phone||''});
 function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
 const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
 const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show,hours:r.hours!=null?+r.hours:null});
@@ -2540,7 +2540,16 @@ function openEditProfile(id){
     '<label class="field"><span>Nama Penuh *</span><input id="epName" value="'+esc(target.name)+'"></label>'+
     '<label class="field"><span>No. Telefon</span><input id="epPhone" value="'+esc(target.phone&&target.phone!=='—'?target.phone:'')+'" placeholder="cth: 012-345 6789"></label>'+
     '<label class="field"><span>Alamat</span><textarea id="epAddress" rows="3" placeholder="Alamat penuh...">'+esc(target.address||'')+'</textarea></label>'+
-    '<label class="field"><span>Status Perkahwinan</span><select id="epMarital">'+MARITAL.map(m=>'<option value="'+m.v+'"'+(target.maritalStatus===m.v?' selected':'')+'>'+esc(m.lb)+'</option>').join('')+'</select></label>';
+    '<label class="field"><span>Status Perkahwinan</span><select id="epMarital">'+MARITAL.map(m=>'<option value="'+m.v+'"'+(target.maritalStatus===m.v?' selected':'')+'>'+esc(m.lb)+'</option>').join('')+'</select></label>'+
+  '<h3 style="margin-top:14px">🚑 Maklumat Kecemasan</h3>'+
+  '<label class="field"><span>Nama Ibu/Bapa</span><input id="epEmgName" value="'+esc(target.emergencyName||'')+'" placeholder="cth: Aisyah binti Ahmad"></label>'+
+  '<label class="field"><span>Hubungan</span><select id="epEmgRel"><option value=""'+(target.emergencyRelationship===''?' selected':'')+'>— Pilih —</option><option value="mother"'+(target.emergencyRelationship==='mother'?' selected':'')+'>Ibu</option><option value="father"'+(target.emergencyRelationship==='father'?' selected':'')+'>Bapa</option><option value="other"'+(target.emergencyRelationship==='other'?' selected':'')+'>Lain-lain</option></select></label>'+
+  '<label class="field"><span>Alamat Ibu/Bapa</span><textarea id="epEmgAddr" rows="2" placeholder="Alamat penuh...">'+esc(target.emergencyAddress||'')+'</textarea></label>'+
+  '<label class="chk" style="margin:-4px 0 8px;font-size:14px"><input type="checkbox" id="epEmgSame" onchange="if(this.checked){$(\'#epEmgAddr\').value=$(\'#epAddress\').value}"> Sama dengan alamat staf</label>'+
+  '<label class="field"><span>No. Telefon Bimbit</span><input id="epEmgPhone" value="'+esc(target.emergencyPhone||'')+'" placeholder="cth: 012-345 6789"></label>'+
+  '<h3 style="margin-top:14px">🏦 Maklumat Perbankan</h3>'+
+  '<label class="field"><span>Nama Bank / E-Wallet</span><select id="epBankName"><option value=""'+(target.bankName===''?' selected':'')+'>— Pilih —</option>'+['MayBank','CIMB Bank','RHB Bank','Public Bank','Bank Islam','Bank Rakyat','AmBank','Hong Leong Bank','Affin Bank','Bank Muamalat','Agro Bank','BSN (Bank Simpanan Nasional)','Touch n Go eWallet','ShopeePay','GrabPay','Boost','BigPay','MAE by Maybank','Alliance Bank','Standard Chartered'].map(b=>'<option value="'+b+'"'+(target.bankName===b?' selected':'')+'>'+b+'</option>').join('')+'</select></label>'+
+  '<label class="field"><span>No. Akaun Bank / E-Wallet</span><input id="epBankAcc" value="'+esc(target.bankAccount||'')+'" placeholder="cth: 1234567890123"></label>'
   // Manager edit: tambah field role/pay_cycle/active
   if(isMgrEdit){
     html+='<h3 style="margin-top:14px">🔑 Tetapan Akaun (Manager)</h3>'+
@@ -2597,9 +2606,15 @@ async function saveProfileEdit(id){
   const phone=($('#epPhone')||{}).value||'';
   const address=($('#epAddress')||{}).value||'';
   const marital=($('#epMarital')||{}).value||'';
+  const emergencyName=($('#epEmgName')||{}).value||'';
+  const emergencyRel=($('#epEmgRel')||{}).value||'';
+  const emergencyAddr=($('#epEmgAddr')||{}).value||'';
+  const emergencyPhone=($('#epEmgPhone')||{}).value||'';
+  const bankName=($('#epBankName')||{}).value||'';
+  const bankAcc=($('#epBankAcc')||{}).value||'';
   const avatar=window._avatarData||'';
   if(name.trim().length<2)return toast('Nama mesti sekurang-kurangnya 2 aksara','err');
-  let payload={p_name:name.trim(),p_phone:phone.trim(),p_address:address.trim(),p_avatar:avatar,p_marital:marital};
+  let payload={p_name:name.trim(),p_phone:phone.trim(),p_address:address.trim(),p_avatar:avatar,p_marital:marital,p_emergency_name:emergencyName.trim(),p_emergency_relationship:emergencyRel,p_emergency_address:emergencyAddr.trim(),p_emergency_phone:emergencyPhone.trim(),p_bank_name:bankName,p_bank_account:bankAcc.trim()};
   let rpc='update_my_profile';
   if(isMgrEdit){
     rpc='admin_update_profile';
