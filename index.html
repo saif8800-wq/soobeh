@@ -1472,6 +1472,14 @@ function renderStaffProfile(){
   '<div class="detailrow"><span>Alamat</span><b style="text-align:right;white-space:pre-line">'+(u.address?esc(u.address):'— belum diisi')+'</b></div>'+
   '<div class="detailrow"><span>Status perkahwinan</span><b>'+(u.maritalStatus?'<span class="chip chip-info">'+esc(({single:'Tidak Berkahwin',married:'Berkahwin',widowed:'Duda / Janda',divorced:'Cerai'})[u.maritalStatus]||u.maritalStatus)+'</span>':'— belum diisi')+'</b></div>'+
   '</div></div>'+
+  '<div class="card glass"><h3>🚑 Maklumat Kecemasan</h3>'+
+  '<div class="detailrow"><span>Nama Ibu/Bapa</span><b>'+(u.emergencyName?esc(u.emergencyName):'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Hubungan</span><b>'+(u.emergencyRelationship==='mother'?'Ibu':u.emergencyRelationship==='father'?'Bapa':u.emergencyRelationship==='other'?'Lain-lain':'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Telefon Bimbit</span><b>'+(u.emergencyPhone?esc(u.emergencyPhone):'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>Alamat</span><b style="text-align:right;white-space:pre-line">'+(u.emergencyAddress?esc(u.emergencyAddress):'— belum diisi')+'</b></div></div>'+
+  '<div class="card glass"><h3>🏦 Maklumat Perbankan</h3>'+
+  '<div class="detailrow"><span>Nama Bank</span><b>'+(u.bankName?esc(u.bankName):'— belum diisi')+'</b></div>'+
+  '<div class="detailrow"><span>No. Akaun</span><b>'+(u.bankAccount?esc(u.bankAccount):'— belum diisi')+'</b></div></div>'+
   '<div class="card glass"><h3>Tukar PIN</h3>'+
   '<label class="field"><span>PIN semasa</span><input id="pinCur" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
   '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
