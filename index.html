@@ -513,6 +513,14 @@ function computeCycle(staffId,pStart,pEnd){
   return {shifts:shifts,totalHours:totalHours,basePay:basePay,highHours:highHours,extraPay:extraPay,salesSum:salesSum};
 }
 function perfEligible(staffId,mk){
+  // Pemohon (from_staff) of APPROVED swap = NOT eligible (pengganti yang layak)
+  const isPemohon=DB.swaps.some(s=>{
+    if(s.status!=='approved')return false;
+    if(s.fromStaffId!==staffId)return false;
+    const e=DB.schedule.find(x=>x.id===s.entryId);
+    return e&&monthKey(e.date)===mk;
+  });
+  if(isPemohon)return {ok:false,sum:0,why:'Pemohon pertukaran syif (approved)'};
   const sum=scheduledEntries(staffId,mk).filter(e=>!e.noShow).reduce((a,e)=>a+(getSale(e.date,e.shift)||0),0);
   return {ok:sum>DB.settings.monthlySalesThreshold,sum:sum};
 }
@@ -520,8 +528,14 @@ function attEligible(staffId,mk){
   const sched=scheduledEntries(staffId,mk);
   if(!sched.length)return {ok:false,why:'Tiada syif dijadualkan bulan ini'};
   if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir'};
-  const inv=DB.swaps.filter(s=>{const e=DB.schedule.find(x=>x.id===s.entryId);return e&&monthKey(e.date)===mk&&(s.fromStaffId===staffId||s.toStaffId===staffId)});
-  if(inv.length)return {ok:false,why:'Terdapat rekod pertukaran syif'};
+  // Pemohon (from_staff) of APPROVED swap = NOT eligible (pengganti yang layak)
+  const isPemohonApproved=DB.swaps.some(s=>{
+    if(s.status!=='approved')return false;
+    if(s.fromStaffId!==staffId)return false;
+    const e=DB.schedule.find(x=>x.id===s.entryId);
+    return e&&monthKey(e.date)===mk;
+  });
+  if(isPemohonApproved)return {ok:false,why:'Pemohon pertukaran syif (approved)'};
   if(DB.attendance.some(a=>a.staffId===staffId&&monthKey(a.date)===mk&&a.late&&!a.lateOverride))return {ok:false,why:'Terdapat rekod punch-in LAMBAT (belum diluluskan manager)'};
   return {ok:true,why:''};
 }
@@ -1480,7 +1494,7 @@ function reportSummary(staffId,mk){
     const sale=getSale(e.date,e.shift),h=hrsOf(e);
     if(!e.noShow){th+=h;if(sale!=null)ts+=sale}
     if(a&&a.punchIn)pn++;
-    if(a&&a.late)ln++;
+    if(a&&a.late&&!a.lateOverride)ln++;
   });
   return {n:rows.length,h:Math.round(th*10)/10,ts:ts,pn:pn,ln:ln};
 }
@@ -1537,7 +1551,7 @@ function exportStaffReportPDF(){
     const a=DB.attendance.find(x=>x.staffId===sel.id&&x.date===e.date&&x.shift===e.shift);
     const sale=getSale(e.date,e.shift);
     return '<tr><td>'+dShort(e.date)+'</td><td>'+(e.shift==='morning'?'Pagi':'Petang')+'</td>'+
-    '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?' (LAMBAT)':''):(e.noShow?'Tidak Hadir':'—'))+'</td>'+
+    '<td>'+(a&&a.punchIn?fmtT(a.punchIn)+(a.late?(a.lateOverride?' (DILULUSKAN)':' (LAMBAT)'):''):(e.noShow?'Tidak Hadir':'—'))+'</td>'+
     '<td>'+(a&&a.punchOut?fmtT(a.punchOut):'—')+'</td>'+
     '<td style="text-align:right">'+(sale!=null?'RM '+sale.toFixed(2):'—')+'</td></tr>';
   }).join('');
@@ -2204,7 +2218,7 @@ function renderMPayroll(){
   const SG=DB.settings;
   const attRows=DB.users.filter(x=>x.role==='staff'&&x.active!==false).map(x=>{
     const att=DB.attendance.filter(a=>a.staffId===x.id&&monthKey(a.date)===mk);
-    const late=att.filter(a=>a.late).length;
+    const late=att.filter(a=>a.late&&!a.lateOverride).length;
     const el=attEligible(x.id,mk);
     return '<tr><td>'+esc(x.name)+'</td><td>'+att.length+'</td><td>'+(late?'<span class="chip chip-warn">'+late+' lambat</span>':'<span class="chip chip-ok">0</span>')+'</td><td>'+(el.ok?'<span class="chip chip-ok">LAYAK</span>':'<span class="chip chip-no" title="'+esc(el.why)+'">TIDAK</span>')+'</td></tr>';
   }).join('');
