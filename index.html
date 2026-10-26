@@ -355,7 +355,7 @@ function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],pa
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
-const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||''});
+const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||'',icNumber:r.ic_number||'',bankAccount:r.bank_account||'',resignedAt:r.resigned_at?Date.parse(r.resigned_at):null,resignationDate:r.resignation_date||null,resignationReason:r.resignation_reason||''});
 function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
 const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
 const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show,hours:r.hours!=null?+r.hours:null});
@@ -2294,6 +2294,7 @@ function openStaffManage(id){
   '<div class="detailrow"><span>Status Perkahwinan</span><b>'+(x.maritalStatus?'<span class="chip chip-info">'+esc(MARITAL_LB[x.maritalStatus]||x.maritalStatus)+'</span>':'— belum diisi')+'</b></div>'+
   '<div class="detailrow"><span>Kitaran Gaji</span><b>'+cycleLabel+'</b></div>'+
   '<div class="detailrow"><span>Elaun Typhoid</span><b>'+x.typhoidCount+'/'+DB.settings.typhoidMax+' kali dibayar</b></div>'+
+  (x.resignedAt?'<div class="detailrow"><span>Status Berhenti</span><b><span class="chip chip-no">🚪 Berhenti</span> '+(x.resignationDate?fmtDateDMY(x.resignationDate):'—')+'</b></div>'+(x.resignationReason?'<div class="detailrow"><span>Sebab</span><b>'+esc(x.resignationReason)+'</b></div>':''):'')+
   offerLetterSectionHTML(x.id)+
   '<h3 style="margin-top:20px">⚡ Tindakan</h3>'+
   '<div class="action-grid">'+
@@ -2303,6 +2304,7 @@ function openStaffManage(id){
   (x.role==='staff'?'<button class="btn" onclick="closeModal();openStaffHoursModal(\''+x.id+'\')"><span class="ic">⏱</span>Jam Default</button>':'')+
   '<button class="btn" onclick="closeModal();openResetPin(\''+x.id+'\')"><span class="ic">🔑</span>Set Semula PIN</button>'+
   (x.id!==me.id?'<button class="btn '+(inactive?'btn-ok':'btn-danger')+'" onclick="closeModal();toggleActive(\''+x.id+'\')"><span class="ic">'+(inactive?'✔':'⏻')+'</span>'+(inactive?'Aktifkan':'Nyahaktif')+'</button>':'')+
+  (x.role==='staff'&&!x.resignedAt?'<button class="btn btn-danger" onclick="closeModal();openResignStaffModal(\''+x.id+'\')"><span class="ic">🚪</span>Berhenti</button>':'')+
   '</div>'+
   '<p class="hint" style="margin-top:14px">💡 Klik tindakan untuk melaksanakannya — modal ini akan tutup & tindakan dipilih akan terbuka.</p>';
   openModal('⚡ Urus Staf — '+esc(x.name),body);
@@ -3839,6 +3841,83 @@ function offerLetterSectionHTML(staffId){
     '<div class="chips" style="margin-top:6px">'+
     '<button class="btn btn-sm" onclick="closeModal();openOfferLetterModal(\''+agr.id+'\')">👁️ Lihat (Manager)</button>'+
     '</div>';
+}
+
+
+/* ---------- 17h. RESIGN STAFF MODULE (Manager) ---------- */
+// Helper: format date untuk display
+function fmtDateDMY(d){
+  if(!d)return '—';
+  const dt=new Date(d+'T00:00:00');
+  const pad=n=>String(n).padStart(2,'0');
+  return pad(dt.getDate())+'/'+pad(dt.getMonth()+1)+'/'+dt.getFullYear();
+}
+
+// Buka modal "Sahkan Berhenti" untuk staf
+function openResignStaffModal(staffId){
+  const me=reqMgr();if(!me)return;
+  const s=DB.users.find(u=>u.id===staffId);
+  if(!s)return toast('Staf tidak dijumpai','err');
+  if(s.role!=='staff')return toast('Hanya staf boleh diproses berhenti','err');
+  if(s.resignedAt)return toast('Staf ini dah diproses berhenti','err');
+  // Check if staff has future bookings/schedule
+  const todayStr=todayStr();
+  const futureBookings=DB.bookings.filter(b=>b.staffId===staffId&&b.date>todayStr);
+  const futureSchedule=DB.schedule.filter(e=>e.staffId===staffId&&e.date>todayStr);
+  const warnMsg=futureBookings.length||futureSchedule.length?
+    '⚠ Staf ini ada <b>'+(futureBookings.length+futureSchedule.length)+' rekod</b> (tempahan + jadual) pada masa depan yang akan <b>DIPADAM</b> sepenuhnya. Manager perlu assign staf lain ke slot tersebut selepas ini.':
+    'Staf ini tiada rekod kerja masa depan.';
+
+  const html='<div class="notice warn" style="margin-bottom:14px">'+
+    '<b>⚠ AMARAN:</b> Tindakan ini <b>TIDAK BOLEH DIBATALKAN</b>. Staf akan ditandakan sebagai berhenti & tak boleh log masuk lagi. '+
+    'Pastikan anda dah beritahu staf & settle semua urusan gaji/cuti sebelum proses.'+
+    '</div>'+
+    '<div class="detailrow"><span>Nama Staf</span><b>'+esc(s.name)+'</b></div>'+
+    '<div class="detailrow"><span>Username</span><b>@'+esc(s.username)+'</b></div>'+
+    '<div class="detailrow"><span>Telefon</span><b>'+esc(s.phone||'—')+'</b></div>'+
+    '<div class="detailrow"><span>Rekod masa depan</span><b>'+warnMsg+'</b></div>'+
+
+    '<h3 style="margin-top:14px">📅 Tarikh Berhenti (hari terakhir kerja)</h3>'+
+    '<label class="field"><span>Tarikh Berhenti *</span>'+
+    '<input type="date" id="rsDate" value="'+todayStr+'" min="'+todayStr()+'">'+
+    '<small style="display:block;margin-top:4px;opacity:.7">Semua tempahan &amp; jadual diluluskan <b>selepas</b> tarikh ini akan dipadam. Staf masih boleh kerja sehingga tarikh ini (inklusif).</small>'+
+    '</label>'+
+
+    '<label class="field"><span>📝 Sebab Berhenti (opsyenal)</span>'+
+    '<textarea id="rsReason" rows="3" placeholder="cth: berhenti sendiri, kontrak tamat, pindah kerja, dll"></textarea></label>'+
+
+    '<label class="chk" style="margin-top:8px"><input type="checkbox" id="rsConfirm"> '+
+    '<span>Saya sahkan staf <b>'+esc(s.name)+'</b> berhenti kerja pada tarikh di atas. Saya faham semua tempahan diluluskan akan dipadam &amp; tindakan ini TIDAK BOLEH DIBATALKAN.</span></label>'+
+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-danger btn-big" onclick="submitResignStaff(\''+staffId+'\')">🚪 Sahkan Berhenti</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Batal</button>'+
+    '</div>';
+  openModal('🚪 Sahkan Berhenti — '+esc(s.name),html);
+}
+
+// Submit resignation (panggil RPC)
+async function submitResignStaff(staffId){
+  const me=reqMgr();if(!me)return;
+  const s=DB.users.find(u=>u.id===staffId);if(!s)return;
+  if(s.resignedAt)return toast('Staf dah diproses berhenti','err');
+  const date=($('#rsDate')||{}).value||'';
+  const reason=($('#rsReason')||{}).value||'';
+  const confirm=!!$('#rsConfirm').checked;
+  if(!date)return toast('Tarikh berhenti wajib diisi','err');
+  if(!confirm)return toast('Sila tick pengesahan dahulu','err');
+  // Double-confirm with native dialog
+  if(!window.confirm('PASTI? Staf "'+s.name+'" akan ditandakan berhenti pada '+fmtDateDMY(date)+'. SEMUA tempahan & jadual selepas tarikh ini akan DIPADAM. Tindakan TIDAK BOLEH dibatalkan.'))return;
+  const btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='⏳ Memproses...'}
+  const {error}=await SB.rpc('resign_staff',{
+    p_staff_id:staffId,
+    p_resignation_date:date,
+    p_reason:reason.trim()
+  });
+  if(btn){btn.disabled=false;btn.textContent='🚪 Sahkan Berhenti'}
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();
+  toast('Staf '+s.name+' ditandakan berhenti ✔ — sila assign staf lain ke slot kosong','ok');
 }
 
 
