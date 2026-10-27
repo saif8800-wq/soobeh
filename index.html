@@ -1552,6 +1552,16 @@ function renderMReport(){
   '</table></div>'+
   '<button class="btn btn-ok btn-big" onclick="exportAllReportPDF()">⬇ Export PDF — Semua Staf</button>'+
   '<p class="hint">Laporan untuk rekod bulanan &amp; semakan kelayakan Bonus Kehadiran (lambat = tidak layak).</p></div>';
+  // GPS settings (moved from Gaji tab)
+  const SG=DB.settings;
+  html+='<div class="card glass"><h3>📍 Lokasi Kedai (Geofence Punch)</h3>'+
+  '<div class="detailrow"><span>Lokasi kedai</span><b>'+(SG.storeLat!=null?SG.storeLat.toFixed(5)+', '+SG.storeLng.toFixed(5)+' · ±'+SG.geofenceRadius+'m':'<span class="chip chip-warn">BELUM DITETAPKAN</span>')+'</b></div>'+
+  '<div class="formgrid"><label class="field"><span>Latitude</span><input id="slLat" value="'+(SG.storeLat!=null?SG.storeLat:'')+'" placeholder="cth: 3.139003"></label>'+
+  '<label class="field"><span>Longitude</span><input id="slLng" value="'+(SG.storeLng!=null?SG.storeLng:'')+'" placeholder="cth: 101.686855"></label>'+
+  '<label class="field"><span>Radius geofence (meter)</span><input type="number" id="slRad" min="10" max="2000" value="'+SG.geofenceRadius+'"></label></div>'+
+  '<div class="chips" style="margin:8px 0"><button class="btn btn-sm" onclick="fillMyLoc()">📍 Guna Lokasi Saya Sekarang</button>'+
+  '<button class="btn btn-primary btn-sm" onclick="saveStoreLoc()">💾 Simpan Lokasi Kedai</button></div>'+
+  '<p class="hint">Berdiri <b>di dalam kedai</b> → tekan "Guna Lokasi Saya" → Simpan. GPS jalur tepat boleh berubah ±10–20m — naikkan radius jika staff kerap tersasar.</p></div>';
   $('#viewRoot').innerHTML=html;
 }
 function exportStaffReportPDF(){
@@ -2033,7 +2043,7 @@ function exportExpensesPDF(){
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Tempahan'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Pertukaran'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'laporan',ic:'📈',lb:'Laporan'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'},{k:'staf',ic:'👥',lb:'Staf'},{k:'consign',ic:'📦',lb:'Consign'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Syif Request'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'tukar',ic:'🔄',lb:'Syif Swap'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'laporan',ic:'📈',lb:'Punch Card'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -2197,6 +2207,13 @@ function renderMSwaps(){
   $('#viewRoot').innerHTML=html;
 }
 function renderMPayroll(){
+  // Typhoid toggle (moved from Staf tab) - will be prepended after S is defined
+
+  let typhHtml='<div class="card glass staff-toggle-row">'+
+  '<div class="info"><b>💉 Elaun Typhoid</b> '+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+
+  '<div class="hint" style="margin-top:4px">Kadar '+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff). Hanya beri kesan kepada slip yang dijana <b>selepas</b> ini.</div></div>'+
+  '<button class="btn btn-sm '+(S.typhoidEnabled===false?'btn-ok':'btn-danger')+'" onclick="toggleTyphoidEnabled()">'+(S.typhoidEnabled===false?'▶ Mula Bayaran':'⏸ Matikan')+'</button>'+
+  '</div>';
   if(!ROUTE.pmk)ROUTE.pmk=monthKey(todayStr());
   const mk=ROUTE.pmk,dim=daysInMonth(mk),S=DB.settings;
   const monthly=DB.users.filter(u=>u.role==='staff'&&u.active!==false&&u.payCycle==='monthly');
@@ -2212,6 +2229,7 @@ function renderMPayroll(){
   '<div class="detailrow"><span>Kadar</span><b>'+rm(S.attBonus)+' · maksimum sekali sebulan setiap staff</b></div>'+
   '<button class="btn '+(S.attBonusEnabled?'btn-danger':'btn-ok')+' btn-big" onclick="toggleAttBonus()">'+(S.attBonusEnabled?'⏸ Matikan Bonus Kehadiran':'▶ Aktifkan Bonus Kehadiran')+'</button>'+
   '<p class="hint">Aliran disyorkan: aktifkan pada <b>akhir bulan</b> → jana slip terakhir bulan → matikan semula. Hanya staff <b>hadir penuh + tiada tidak-hadir, tiada pertukaran syif & <b>tiada punch-in lambat</b> layak. Slip 2-mingguan hanya terima bonus pada slip Kitaran 2 — Kitaran 1 tidak pernah termasuk.</p></div>';
+  html=typhHtml+html; // Prepend Typhoid toggle
   if(monthly.length)html+='<div class="card glass"><h3>📅 Kumpulan Bulanan — 1 hingga '+dim+' ('+monthly.length+' staff)</h3>'+
     monthly.map(u=>{const p=slipFor(u.id,mk+'-01');return '<div class="brow"><div><b>'+esc(u.name)+'</b> <span class="chip">'+esc(u.username)+'</span></div>'+(p?'<span class="chip chip-ok">RM '+p.total.toFixed(2)+'</span>':'<span class="chip chip-wait">Belum dijana</span>')+'</div>'}).join('')+
     '<button class="btn btn-primary btn-big" onclick="genPayslips(\'M\')">🧾 Jana Slip — Kitaran Bulanan</button></div>';
@@ -2235,14 +2253,6 @@ function renderMPayroll(){
     const el=attEligible(x.id,mk);
     return '<tr><td>'+esc(x.name)+'</td><td>'+att.length+'</td><td>'+(late?'<span class="chip chip-warn">'+late+' lambat</span>':'<span class="chip chip-ok">0</span>')+'</td><td>'+(el.ok?'<span class="chip chip-ok">LAYAK</span>':'<span class="chip chip-no" title="'+esc(el.why)+'">TIDAK</span>')+'</td></tr>';
   }).join('');
-  html+='<div class="card glass"><h3>📍 Lokasi Kedai (Geofence Punch)</h3>'+
-  '<div class="detailrow"><span>Lokasi kedai</span><b>'+(SG.storeLat!=null?SG.storeLat.toFixed(5)+', '+SG.storeLng.toFixed(5)+' · ±'+SG.geofenceRadius+'m':'<span class="chip chip-warn">BELUM DITETAPKAN</span>')+'</b></div>'+
-  '<div class="formgrid"><label class="field"><span>Latitude</span><input id="slLat" value="'+(SG.storeLat!=null?SG.storeLat:'')+'" placeholder="cth: 3.139003"></label>'+
-  '<label class="field"><span>Longitude</span><input id="slLng" value="'+(SG.storeLng!=null?SG.storeLng:'')+'" placeholder="cth: 101.686855"></label>'+
-  '<label class="field"><span>Radius geofence (meter)</span><input type="number" id="slRad" min="10" max="2000" value="'+SG.geofenceRadius+'"></label></div>'+
-  '<div class="chips" style="margin:8px 0"><button class="btn btn-sm" onclick="fillMyLoc()">📍 Guna Lokasi Saya Sekarang</button>'+
-  '<button class="btn btn-primary btn-sm" onclick="saveStoreLoc()">💾 Simpan Lokasi Kedai</button></div>'+
-  '<p class="hint">Berdiri <b>di dalam kedai</b> → tekan "Guna Lokasi Saya" → Simpan. GPS jalur tepat boleh berubah ±10–20m — naikkan radius jika staff kerap tersasar.</p></div>'+
   '<div class="card glass"><h3>📋 Kehadiran & Kelayakan Bonus — '+monthLabel(mk)+'</h3>'+
   '<div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Punch In</th><th>Lambat</th><th>Layak Bonus</th></tr>'+attRows+'</table></div>'+
   '<p class="hint">Layak = hadir penuh, tiada tidak-hadir, tiada pertukaran syif & <b>tiada punch-in lambat</b> bulan ini.</p></div>'+
@@ -2262,11 +2272,6 @@ function renderMStaff(){
   const filtered=search?list.filter(x=>x.name.toLowerCase().includes(search)||(x.username||'').toLowerCase().includes(search)):list;
   let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">➕ Tambah Akaun</button></div>';
   // Compact Typhoid toggle (satu baris)
-  html+='<div class="card glass staff-toggle-row">'+
-  '<div class="info"><b>💉 Elaun Typhoid</b> '+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+
-  '<div class="hint" style="margin-top:4px">Kadar '+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff). Hanya beri kesan kepada slip yang dijana <b>selepas</b> ini.</div></div>'+
-  '<button class="btn btn-sm '+(S.typhoidEnabled===false?'btn-ok':'btn-danger')+'" onclick="toggleTyphoidEnabled()">'+(S.typhoidEnabled===false?'▶ Mula Bayaran':'⏸ Matikan')+'</button>'+
-  '</div>';
   // Search box
   html+='<div class="card glass" style="padding:10px 14px"><input class="search-input" id="staffSearchInput" placeholder="🔍 Cari staf ikut nama atau username..." oninput="setStaffSearch(this.value)" value="'+esc(ROUTE.staffSearch||'')+'"></div>';
   // Result count
