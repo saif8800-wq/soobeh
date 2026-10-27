@@ -527,8 +527,12 @@ function perfEligible(staffId,mk){
 function attEligible(staffId,mk){
   const sched=scheduledEntries(staffId,mk);
   if(!sched.length)return {ok:false,why:'Tiada syif dijadualkan bulan ini'};
-  if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir'};
-  // Pemohon (from_staff) of APPROVED swap = NOT eligible (pengganti yang layak)
+  // 1. MINIMUM 15 syif sebulan (polisi baharu)
+  const MIN_SHIFTS_FOR_ATT_BONUS=15;
+  if(sched.length<MIN_SHIFTS_FOR_ATT_BONUS)return {ok:false,why:'Syif kurang daripada '+MIN_SHIFTS_FOR_ATT_BONUS+' sebulan ('+sched.length+' syif sahaja) - minimum 15 syif diperlukan'};
+  // 2. Hadir penuh (tiada noShow)
+  if(sched.some(e=>e.noShow))return {ok:false,why:'Terdapat rekod tidak hadir (noShow)'};
+  // 3. Pemohon (from_staff) of APPROVED swap only = NOT eligible (polisi lama)
   const isPemohonApproved=DB.swaps.some(s=>{
     if(s.status!=='approved')return false;
     if(s.fromStaffId!==staffId)return false;
@@ -536,6 +540,7 @@ function attEligible(staffId,mk){
     return e&&monthKey(e.date)===mk;
   });
   if(isPemohonApproved)return {ok:false,why:'Pemohon pertukaran syif (approved)'};
+  // 4. Tak pernah lambat punch in (kecuali diluluskan manager override)
   if(DB.attendance.some(a=>a.staffId===staffId&&monthKey(a.date)===mk&&a.late&&!a.lateOverride))return {ok:false,why:'Terdapat rekod punch-in LAMBAT (belum diluluskan manager)'};
   return {ok:true,why:''};
 }
