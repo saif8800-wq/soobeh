@@ -2209,13 +2209,13 @@ function renderMSwaps(){
 function renderMPayroll(){
   // Typhoid toggle (moved from Staf tab) - will be prepended after S is defined
 
+  if(!ROUTE.pmk)ROUTE.pmk=monthKey(todayStr());
+  const mk=ROUTE.pmk,dim=daysInMonth(mk),S=DB.settings;
   let typhHtml='<div class="card glass staff-toggle-row">'+
   '<div class="info"><b>💉 Elaun Typhoid</b> '+(S.typhoidEnabled===false?'<span class="chip chip-no">DIMATIKAN</span>':'<span class="chip chip-ok">AKTIF</span>')+
   '<div class="hint" style="margin-top:4px">Kadar '+rm(S.typhoidAllowance)+' / kitaran · maksimum '+S.typhoidMax+' kali (RM'+(S.typhoidAllowance*S.typhoidMax).toFixed(2)+' setiap staff). Hanya beri kesan kepada slip yang dijana <b>selepas</b> ini.</div></div>'+
   '<button class="btn btn-sm '+(S.typhoidEnabled===false?'btn-ok':'btn-danger')+'" onclick="toggleTyphoidEnabled()">'+(S.typhoidEnabled===false?'▶ Mula Bayaran':'⏸ Matikan')+'</button>'+
   '</div>';
-  if(!ROUTE.pmk)ROUTE.pmk=monthKey(todayStr());
-  const mk=ROUTE.pmk,dim=daysInMonth(mk),S=DB.settings;
   const monthly=DB.users.filter(u=>u.role==='staff'&&u.active!==false&&u.payCycle==='monthly');
   const bi=DB.users.filter(u=>u.role==='staff'&&u.active!==false&&u.payCycle==='biweekly');
   const slips=DB.payslips.filter(p=>p.monthKey===mk).sort((a,b)=>a.start.localeCompare(b.start)||a.staffName.localeCompare(b.staffName));
