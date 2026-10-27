@@ -977,7 +977,7 @@ function openSwapModal(preId){
    '<label class="field"><span>2. Pilih rakan sekerja</span><select id="swPeer" onchange="swapPeerChanged()">'+peers.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select></label>'+
    '<label class="field"><span>3. Tukar dua hala? (opsyenal — pilih syif rakan)</span><select id="swEx"></select></label>'+
    '<label class="field"><span>Sebab (untuk rujukan manager)</span><textarea id="swReason" rows="3" placeholder="Contoh: balik kampung, temujanji klinik..."></textarea></label>'+
-   '<div class="notice warn">⚠ Nota: sebarang rekod pertukaran syif akan menamatkan kelayakan <b>Bonus Kehadiran (RM'+DB.settings.attBonus+')</b> anda bagi bulan berkenaan (PRD 6.2).</div>'+
+   '<div class="notice warn">⚠ Nota: rekod pertukaran syif yang diluluskan (approved) akan menamatkan kelayakan <b>Bonus Kehadiran (RM'+DB.settings.attBonus+')</b> anda bagi bulan berkenaan (PRD 6.2).</div>'+
    '<button class="btn btn-primary btn-big" onclick="submitSwap()">Hantar Permohonan</button>');
   swapPeerChanged();}
 function swapPeerChanged(){const p=$('#swPeer').value;if(!p)return;
@@ -1588,7 +1588,7 @@ function exportAllReportPDF(){
   $('#printArea').innerHTML='<div class="payslip" style="color:#000">'+
   '<div class="ps-head"><div><h1>LAPORAN KEHADIRAN &amp; JUALAN</h1><small>Soobeh TBG · Semua Staf</small></div><div style="text-align:right"><b>'+monthLabel(mk)+'</b><br><small>Dijana: '+new Date().toLocaleString('ms-MY')+'</small></div></div>'+
   '<table><tr><th>Staf</th><th>Syif</th><th>Jam</th><th>Punch In</th><th>Lambat</th><th style="text-align:right">Jualan Sebulan</th></tr>'+trs+'</table>'+
-  '<p class="ps-note">Lambat = punch in selepas waktu syif bermula — hilang kelayakan Bonus Kehadiran bulan berkenaan. Laporan dijana automatik oleh Sistem Soobeh TBG.</p></div>';
+  '<p class="ps-note">Polisi Bonus Kehadiran: minimum 15 syif sebulan, hadir penuh, tiada swap approved, tiada punch-in lambat (kecuali diluluskan). Laporan dijana automatik oleh Sistem Soobeh TBG.</p></div>';
   toast('Skrin cetak akan terbuka — pilih "Simpan sebagai PDF" 💾','info');
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
