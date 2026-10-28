@@ -341,11 +341,11 @@ details.demo .inner{padding:0 16px 14px}
 .offer-letter-agreed{border-color:rgba(102,187,106,.45) !important;background:linear-gradient(180deg,rgba(102,187,106,.06),rgba(255,255,255,.02)) !important}
 .task-dropdown-wrap{display:flex;gap:6px;align-items:stretch}
 .chart{display:flex;align-items:flex-end;gap:4px;height:120px;padding:8px 4px}
-.chart-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px}
+.chart-col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px}
 .bars{display:flex;gap:2px;width:100%;height:100%;align-items:flex-end;justify-content:center}
 .bar{width:8px;border-radius:3px 3px 0 0;transition:.3s}
-.bm{background:rgba(255,167,38,.6)}
-.be{background:rgba(186,104,200,.6)}
+.bm{background:rgba(255,167,38,.75)}
+.be{background:rgba(186,104,200,.75)}
 .chart-col small{font-size:10px;opacity:.55}
 .statrow{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
 .stat{flex:1;min-width:80px;text-align:center;padding:8px;border-radius:10px;background:rgba(255,255,255,.04)}
@@ -945,7 +945,7 @@ function renderStaffAttendance(){
   const u=currentUser(),S=DB.settings,mk=monthKey(todayStr());
   const mine=DB.attendance.filter(a=>a.staffId===u.id&&monthKey(a.date)===mk).sort((a,b)=>b.date.localeCompare(a.date));
   const todays=DB.schedule.filter(e=>e.staffId===u.id&&e.date===todayStr());
-  let html='<div class="pagehead"><h2>📍 Kehadiran (Punch In/Out)</h2></div>';
+  let html='<div class="pagehead"><h2>📍 Attendance (Punch In/Out)</h2></div>';
   if(S.storeLat==null)html+='<div class="notice warn">⚠ Manager belum menetapkan lokasi kedai — punch tidak dapat dibuat buat masa ini.</div>';
   if(!todays.length)html+='<div class="notice info">Tiada syif anda hari ini — punch hanya tersedia pada hari anda bertugas.</div>';
   todays.forEach(e=>{
@@ -1331,8 +1331,8 @@ function landingHTML(){return '<div class="landing">'+
  '<p>Sistem Jadual Syif, Pertukaran Syif &amp; Pengiraan Gaji</p>'+
  '<div class="badges"><span class="chip chip-info">☁️ Supabase Database</span><span class="chip chip-info">🗓️ Kitaran 2 minggu</span><span class="chip chip-info">🔐 RLS + Auth berenkripsi</span><span class="chip chip-info">🧾 Slip gaji PDF</span></div></div>'+
  '<div class="portalgrid">'+
- '<button class="portal glass" onclick="goLogin(\'staff\')"><div class="p-ic">👷</div><h2>Portal Staff</h2><p>Tempah syif (2 kali sebulan) · jadual · tukar syif · slip gaji</p><span class="btn btn-primary">Log Masuk →</span></button>'+
- '<button class="portal glass" onclick="goLogin(\'manager\')"><div class="p-ic">👔</div><h2>Portal Manager</h2><p>Sahkan jadual · assign staff · input jualan · jana gaji</p><span class="btn btn-primary">Log Masuk →</span></button></div>'+
+ '<button class="portal glass" onclick="goLogin(\'staff\')"><div class="p-ic">👷</div><h2>Staff Portal</h2><p>Tempah syif (2 kali sebulan) · jadual · tukar syif · slip gaji</p><span class="btn btn-primary">Log Masuk →</span></button>'+
+ '<button class="portal glass" onclick="goLogin(\'manager\')"><div class="p-ic">👔</div><h2>Manager Portal</h2><p>Sahkan jadual · assign staff · input jualan · jana gaji</p><span class="btn btn-primary">Log Masuk →</span></button></div>'+
  '<p class="foot">Soobeh Shift &amp; Payroll System · Fasa 1 · Kitaran tempohan 2 minggu (Tempoh 1: 1–15 · Tempoh 2: 16–akhir bulan)</p></div>';}
 function loginHTML(){const st=ROUTE.portal==='staff';
  return '<div class="loginwrap"><button class="btn btn-sm ghost" onclick="goBackLanding()">← Kembali</button>'+
@@ -1346,7 +1346,7 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
-const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Kalendar'},{k:'hadir',ic:'📍',lb:'Hadir'},{k:'jad',ic:'🗓️',lb:'Jadual'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'tukar',ic:'🔄',lb:'Tukar'},{k:'slip',ic:'🧾',lb:'Slip Gaji'},{k:'prof',ic:'👤',lb:'Profil'}];
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Calendar'},{k:'hadir',ic:'📍',lb:'Attendance'},{k:'jad',ic:'🗓️',lb:'Schedule'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'slip',ic:'🧾',lb:'Payslip'},{k:'prof',ic:'👤',lb:'Profile'}];
 function renderStaffShell(){
   const u=currentUser();
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
@@ -1388,7 +1388,7 @@ function renderStaffCalendar(){
   ensureSlotCounts(mk);
   const est=estimateFor(u.id);
   $('#viewRoot').innerHTML=
-  '<div class="pagehead"><h2>📅 Kalendar Syif Saya</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
+  '<div class="pagehead"><h2>📅 My Shift Calendar</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
 
   (pub?'<div class="notice ok">🔒 Jadual rasmi tempoh ini telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
       :'<div class="notice info">🗓️ Kitaran <b>2 minggu</b>: Tempoh 1 (1–15) &amp; Tempoh 2 (16–akhir bulan). Anda boleh menempah untuk <b>tempoh semasa &amp; tempoh seterusnya</b> sahaja — sehingga <b>'+dShort(winEnd)+'</b>. Status: <span class="chip chip-wait">Menunggu</span> <span class="chip chip-ok">Disahkan</span> <span class="chip chip-no">Tidak Dipilih</span> · had '+DB.settings.maxPerShift+' staff/syif.</div>')+
@@ -1445,7 +1445,7 @@ function renderStaffJadual(){
   const upcoming=items.filter(e=>e.date>=todayStr());
   const past=items.filter(e=>e.date<todayStr()&&e.date<=mEnd);
   const pending=DB.bookings.filter(b=>b.staffId===u.id&&b.date>=todayStr()&&b.status==='pending').sort((a,b)=>a.date.localeCompare(b.date));
-  let html='<div class="pagehead"><h2>🗓️ Jadual Saya</h2><span class="chip chip-info">fokus: akan datang</span></div>';
+  let html='<div class="pagehead"><h2>🗓️ My Schedule</h2><span class="chip chip-info">fokus: akan datang</span></div>';
   /* 1) PALING ATAS — syif akan datang yang telah disahkan manager */
   html+='<div class="card glass"><h3>📅 Syif Akan Datang <small>(telah disahkan)</small></h3>';
   if(upcoming.length){
@@ -1486,7 +1486,7 @@ function renderStaffSwap(){
   const inc=DB.swaps.filter(s=>s.toStaffId===u.id&&s.status==='pending_peer');
   const mine=DB.swaps.filter(s=>s.fromStaffId===u.id).sort((a,b)=>b.t-a.t);
   const hist=DB.swaps.filter(s=>s.toStaffId===u.id&&s.status!=='pending_peer').sort((a,b)=>b.t-a.t);
-  let html='<div class="pagehead"><h2>🔄 Pertukaran Syif</h2><button class="btn btn-primary btn-sm" onclick="openSwapModal()">✚ Mohon Tukar</button></div>'+
+  let html='<div class="pagehead"><h2>🔄 Shift Swap</h2><button class="btn btn-primary btn-sm" onclick="openSwapModal()">✚ Mohon Tukar</button></div>'+
   '<div class="notice info">Aliran: <b>1) Rakan bersetuju</b> → <b>2) Manager luluskan</b> → jadual dikemaskini automatik + rekod audit penuh (diproses di server).</div>';
   if(inc.length)html+='<h3 class="sect">Permintaan Kepada Anda ('+inc.length+')</h3>'+inc.map(s=>swapCardHTML(s,'<div class="chips" style="margin-top:10px"><button class="btn btn-ok" onclick="peerRespond(\''+s.id+'\',true)">✔ Terima</button><button class="btn btn-danger" onclick="peerRespond(\''+s.id+'\',false)">✕ Tolak</button></div>')).join('');
   if(mine.length)html+='<h3 class="sect">Permohonan Saya</h3>'+mine.map(s=>swapCardHTML(s,'')).join('');
@@ -1497,7 +1497,7 @@ function renderStaffSwap(){
 function renderStaffSlips(){
   const u=currentUser(),S=DB.settings,est=estimateFor(u.id);
   const slips=DB.payslips.filter(p=>p.staffId===u.id).sort((a,b)=>b.start.localeCompare(a.start));
-  let html='<div class="pagehead"><h2>🧾 Slip Gaji Saya</h2></div>'+
+  let html='<div class="pagehead"><h2>🧾 My Payslips</h2></div>'+
   '<div class="card glass"><h3>📊 Anggaran Bulan Ini <small>(setakat '+dShort(todayStr())+')</small></h3>'+
   '<div class="detailrow"><span>Syif &amp; jam</span><b>'+est.c.shifts.length+' syif · '+est.c.totalHours+' jam</b></div>'+
   '<div class="detailrow"><span>Gaji asas + kadar tinggi</span><b>'+rm(est.c.basePay+est.c.extraPay)+'</b></div>'+
@@ -1514,7 +1514,7 @@ function renderStaffSlips(){
 }
 function renderStaffProfile(){
   const u=currentUser();
-  $('#viewRoot').innerHTML='<div class="pagehead"><h2>👤 Profil Saya</h2>'+
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>👤 My Profile</h2>'+
   '<div class="chips"><button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+u.id+'\')">✏️ Edit Profil Saya</button>'+
   '<button class="btn btn-sm" onclick="openChangeMyUsername()">🆔 Tukar Username</button></div></div>'+
   '<div class="card glass"><h3>📞 Hubungi Manager</h3>'+
@@ -1571,7 +1571,7 @@ function renderMReport(){
   if(!ROUTE.lrmk)ROUTE.lrmk=monthKey(todayStr());
   const mk=ROUTE.lrmk;
   const staff=DB.users.filter(x=>x.role==='staff'&&x.active!==false);
-  let html='<div class="pagehead"><h2>📈 Laporan Punch Card &amp; Jualan</h2><div class="monthnav glass"><button onclick="lrNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="lrNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>📈 Punch Card &amp; Sales Report</h2><div class="monthnav glass"><button onclick="lrNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="lrNav(1)">▶</button></div></div>';
   if(!staff.length){$('#viewRoot').innerHTML=html+'<div class="notice warn">Tiada staff aktif.</div>';return}
   if(!ROUTE.lrStaff||!staff.some(s=>s.id===ROUTE.lrStaff))ROUTE.lrStaff=staff[0].id;
   const sel=DB.users.find(u=>u.id===ROUTE.lrStaff);
@@ -1691,7 +1691,7 @@ function renderStaffTasks(){
   const u=currentUser();
   const t=todayStr(),my=myShiftsOn(t);
   const today=DB.tasks.filter(x=>x.date===t&&my.includes(x.shift));
-  let html='<div class="pagehead"><h2>📋 Tugasan Saya</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(ROUTE.ltmk||monthKey(t))+'</b><button onclick="ltNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>📋 My Tasks</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(ROUTE.ltmk||monthKey(t))+'</b><button onclick="ltNav(1)">▶</button></div></div>';
   if(!my.length)html+='<div class="notice info">Tiada syif anda hari ini — tugasan hanya muncul pada hari anda bertugas. Belum tempah? <b><a href="#" onclick="openGuide(\'tempah\');return false" style="color:#c7d2fe">Baca panduan 📖</a></b></div>';
   else if(!today.length)html+='<div class="notice ok">✔ Tiada tugasan untuk syif anda hari ini.</div>';
   today.forEach(x=>{
@@ -1750,7 +1750,7 @@ function renderMTasks(){
   const me=reqMgr();if(!me)return;
   if(!ROUTE.ltmk)ROUTE.ltmk=monthKey(todayStr());
   const mk=ROUTE.ltmk;
-  let html='<div class="pagehead"><h2>📋 Tugasan Staf</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="ltNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>📋 Staff Tasks</h2><div class="monthnav glass"><button onclick="ltNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="ltNav(1)">▶</button></div></div>';
   html+='<div class="card glass"><h3>✚ Assign Tugasan <small>(maksimum 2 setiap syif)</small></h3>'+
   '<div class="formgrid">'+
   '<label class="field"><span>Tarikh</span><input type="date" id="atDate" value="'+todayStr()+'" min="'+todayStr()+'" max="'+ymd(new Date(Date.now()+62*864e5))+'"></label>'+
@@ -1912,7 +1912,7 @@ function renderMFinance(){
   const qMax=Math.max(1,...q.map(x=>x.s));
   const prevMk=shiftMonth(mk,-1),prevTotal=monthSalesTotal(prevMk);
   const trend=prevTotal>0?((total-prevTotal)/prevTotal*100):null;
-  let html='<div class="pagehead"><h2>💵 Laporan Kewangan</h2><div class="monthnav glass"><button onclick="finNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="finNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>💵 Finance Report</h2><div class="monthnav glass"><button onclick="finNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="finNav(1)">▶</button></div></div>';
   /* KAD RINGKASAN */
   html+='<div class="statrow">'+
   '<div class="stat"><small>Total Jualan Bulan</small><b>'+rm(total)+'</b></div>'+
@@ -1997,7 +1997,7 @@ function renderMExpenses(){
   const q=[1,2,3,4].map(qn=>{const months=[qn*3-2,qn*3-1,qn*3].map(m=>mk.slice(0,4)+'-'+pad2(m));
     return {qn:qn,s:months.reduce((a,m)=>a+expensesTotal(m),0)}});
   const year=mk.slice(0,4),yearTotal=DB.expenses.filter(e=>e.date.slice(0,4)===year).reduce((a,e)=>a+e.amount,0);
-  let html='<div class="pagehead"><h2>💸 Perbelanjaan Kedai</h2><div class="monthnav glass"><button onclick="emNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="emNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>💸 Shop Expenses</h2><div class="monthnav glass"><button onclick="emNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="emNav(1)">▶</button></div></div>';
   /* Form tambah */
   html+='<div class="card glass"><h3>➖ Tambah Perbelanjaan</h3>'+
   '<div class="formgrid">'+
@@ -2131,7 +2131,7 @@ function renderMDash(){
   const swM=DB.swaps.filter(s=>s.status==='pending_manager').length;
   let est=0;
   const rows=staff.map(u=>{const sc=scheduledEntries(u.id,mk),att=sc.filter(e=>!e.noShow).length;est+=estimateFor(u.id).total;return {u:u,sc:sc.length,att:att,hours:att*S.shiftHours}});
-  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📊 Dashboard Manager</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📊 Manager Dashboard</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
   '<div class="notice info">🗓️ Tempoh semasa: <b>'+periodLabel(cp)+'</b> — '+(periodPublished(cp)?'<span class="chip chip-ok">Diterbitkan</span>':'<span class="chip chip-wait">Belum diterbitkan</span>')+' · Staff boleh menempah hingga <b>'+dShort(bookingWindowEnd())+'</b> (tempoh semasa + seterusnya).</div>'+
   '<div class="statgrid">'+
   '<div class="card glass"><h3>📅 Kehadiran Bulan Semasa <small>+ penanda kitaran gaji (PRD 5.6a)</small></h3><div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Kitaran</th><th>Syif</th><th>Hadir</th><th>Jam</th></tr>'+
@@ -2143,7 +2143,7 @@ function renderMDash(){
   '<div class="detailrow"><span>Tukar syif menunggu manager</span><b>'+swM+' <button class="btn btn-sm" onclick="setMTab(\'tukar\')">Semak →</button></b></div>'+
   '<div class="detailrow"><span>Tukar syif menunggu rakan</span><b>'+swP+'</b></div></div></div>'+
   '<div class="card glass"><h3>📈 Jualan 14 Hari Lepas (mengikut syif)</h3>'+salesChartHTML()+
-  '<div class="chips" style="margin-top:8px"><span class="chip" style="background:rgba(251,191,36,.2)">☀ Pagi</span><span class="chip" style="background:rgba(129,140,248,.2)">🌙 Petang</span></div></div>'+
+  '<div class="chips" style="margin-top:8px"><span class="chip" style="background:rgba(255,167,38,.25)">☀ Pagi</span><span class="chip" style="background:rgba(186,104,200,.25)">🌙 Petang</span></div></div>'+
   '<div class="card glass"><h3>📱 Broadcast WhatsApp</h3><p class="hint" style="margin-bottom:10px">Hantar notifikasi cepat ke semua staff — slip gaji sedia, reminder syif, atau notis am. WhatsApp akan terbuka dengan mesej sudah diisi; anda hanya perlu tekan <b>Send</b>.</p>'+
   '<button class="btn btn-primary btn-big" onclick="openWABroadcast()">📱 Mula Broadcast</button>'+
   '<p class="hint">💡 Pastikan no. telefon semua staff dikemas kini di tab <b>Staf</b> — staff tanpa nombor akan diasingkan.</p></div>';
@@ -2151,7 +2151,7 @@ function renderMDash(){
 function renderMBookings(){
   if(!ROUTE.bpk)ROUTE.bpk=defaultBookPeriod();
   const pk=ROUTE.bpk,pub=periodPublished(pk),b=periodBounds(pk);
-  let html='<div class="pagehead"><h2>✅ Pengesahan &amp; Penjadualan</h2><div class="monthnav glass"><button onclick="bNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="bNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>✅ Booking &amp; Scheduling</h2><div class="monthnav glass"><button onclick="bNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="bNav(1)">▶</button></div></div>';
   if(pub){
     const p=DB.published[pk];
     html+='<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan pada '+new Date(p.t).toLocaleDateString('ms-MY')+' oleh '+esc(p.by||'')+'. Tempoh ini dikunci — perubahan melalui Pertukaran Syif atau <b>Assign</b> di tab Jadual.</div>'+
@@ -2189,7 +2189,7 @@ function renderMBookings(){
 function renderMSchedule(){
   if(!ROUTE.spk)ROUTE.spk=curPeriod();
   const pk=ROUTE.spk,pub=periodPublished(pk),b=periodBounds(pk),S=DB.settings;
-  let html='<div class="pagehead"><h2>🗓️ Jadual Rasmi &amp; Assign Staff</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
+  let html='<div class="pagehead"><h2>🗓️ Schedule &amp; Assign Staff</h2><div class="monthnav glass"><button onclick="sNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="sNav(1)">▶</button></div></div>';
   html+=pub?'<div class="notice ok">🔒 Jadual '+periodLabel(pk)+' telah dikeluarkan &amp; dikunci. Anda masih boleh <b>assign staff ke slot kosong</b> (termasuk tarikh lampau untuk kecemasan) — kesan gaji retrospektif.</div>'
         :'<div class="notice warn">Tempoh ini <b>belum dikeluarkan</b>. Anda boleh (a) sahkan tempahan &amp; keluarkan jadual di tab Tempahan, ATAU (b) assign staff terus ke slot di bawah.</div>';
   if(pub)html+='<div class="chips" style="margin:8px 0"><button class="btn btn-sm btn-danger" onclick="reopenPeriodJS(\''+pk+'\')">🔓 Buka Semula Tempoh Ini (staff boleh menempah semula)</button></div>';
@@ -2233,7 +2233,7 @@ function renderSales(){
   const S=DB.settings,edit=ROUTE.saleEdit;
   const sales=DB.sales.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,40);
   const mk=monthKey(todayStr()),mTotal=DB.sales.filter(s=>monthKey(s.date)===mk).reduce((a,s)=>a+s.amount,0);
-  let html='<div class="pagehead"><h2>💰 Input Jualan Harian (mengikut syif)</h2></div>'+
+  let html='<div class="pagehead"><h2>💰 Daily Sales Input (per shift)</h2></div>'+
   '<div class="card glass"><h3>'+(edit?'Kemaskini Rekod Jualan':'Rekod Baharu')+'</h3>'+
   (edit?'<div class="notice info">Mengemaskini: '+fmtDateDS(edit.date)+' · '+(edit.shift==='morning'?'Pagi':'Petang')+' <button class="btn btn-sm" onclick="ROUTE.saleEdit=null;render()">✚ Rekod Baharu</button></div>':'')+
   '<div class="formgrid">'+
@@ -2253,7 +2253,7 @@ function renderMSwaps(){
   const pm=DB.swaps.filter(s=>s.status==='pending_manager');
   const pp=DB.swaps.filter(s=>s.status==='pending_peer');
   const hist=DB.swaps.filter(s=>!['pending_peer','pending_manager'].includes(s.status)).sort((a,b)=>b.t-a.t);
-  let html='<div class="pagehead"><h2>🔄 Kelulusan Pertukaran Syif</h2></div>';
+  let html='<div class="pagehead"><h2>🔄 Swap Approvals</h2></div>';
   html+=pm.length?'<h3 class="sect">Menunggu Kelulusan Anda ('+pm.length+')</h3>'+
     pm.map(s=>swapCardHTML(s,'<div class="chips" style="margin-top:10px"><button class="btn btn-ok" onclick="mgrSwapDecide(\''+s.id+'\',true)">✔ Luluskan</button><button class="btn btn-danger" onclick="mgrSwapDecide(\''+s.id+'\',false)">✕ Tolak</button></div><p class="hint">⚠ Diluluskan = jadual dikemaskini automatik &amp; bonus kehadiran kedua-dua staff terbatal untuk bulan berkenaan (PRD 6.2). Semak sebab dahulu.</p>')).join(''):
     '<div class="notice ok">✔ Tiada permohonan menunggu kelulusan manager.</div>';
@@ -2277,7 +2277,7 @@ function renderMPayroll(){
   const slots=new Set(DB.schedule.filter(e=>e.monthKey===mk).map(e=>e.date+'|'+e.shift));
   const withSales=new Set(DB.sales.filter(s=>monthKey(s.date)===mk).map(s=>s.date+'|'+s.shift));
   const slipFor=(id,start)=>DB.payslips.find(p=>p.staffId===id&&p.start===start);
-  let html='<div class="pagehead"><h2>🧾 Jana Slip Gaji</h2><div class="monthnav glass"><button onclick="pNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="pNav(1)">▶</button></div></div>'+
+  let html='<div class="pagehead"><h2>🧾 Generate Payslips</h2><div class="monthnav glass"><button onclick="pNav(-1)">◀</button><b>'+monthLabel(mk)+'</b><button onclick="pNav(1)">▶</button></div></div>'+
   '<div class="notice '+(withSales.size<slots.size?'warn':'ok')+'">📶 Jualan dimasukkan: '+withSales.size+'/'+slots.size+' slot bulan ini. '+(withSales.size<slots.size?'Slot tanpa jualan dikira pada kadar asas RM'+S.baseRate.toFixed(0)+'/jam — pastikan semua jualan dimasukkan sebelum jana untuk ketepatan 100%.':'')+'</div>'+
   '<div class="card glass"><h3>🎯 Bonus Kehadiran — Kawalan Manual Manager</h3>'+
   '<div class="detailrow"><span>Status</span><b>'+(S.attBonusEnabled?'<span class="chip chip-ok">AKTIF — slip baharu termasuk bonus (jika layak)</span>':'<span class="chip chip-no">DIMATIKAN</span>')+'</b></div>'+
@@ -2325,7 +2325,7 @@ function renderMStaff(){
   const list=DB.users.filter(x=>isAdmin?true:x.role==='staff').sort((a,b)=>a.role===b.role?a.name.localeCompare(b.name):(a.role==='staff'?-1:1));
   const search=(ROUTE.staffSearch||'').toLowerCase().trim();
   const filtered=search?list.filter(x=>x.name.toLowerCase().includes(search)||(x.username||'').toLowerCase().includes(search)):list;
-  let html='<div class="pagehead"><h2>👥 Pengurusan Staf</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">➕ Tambah Akaun</button></div>';
+  let html='<div class="pagehead"><h2>👥 Staff Management</h2><button class="btn btn-primary btn-sm" onclick="openAddStaff()">➕ Tambah Akaun</button></div>';
   // Compact Typhoid toggle (satu baris)
   // Search box
   html+='<div class="card glass" style="padding:10px 14px"><input class="search-input" id="staffSearchInput" placeholder="🔍 Cari staf ikut nama atau username..." oninput="setStaffSearch(this.value)" value="'+esc(ROUTE.staffSearch||'')+'"></div>';
@@ -2398,9 +2398,9 @@ function openStaffManage(id){
 }
 function renderMSettings(){
   const me=currentUser(),S=DB.settings;
-  if(me.role!=='admin'){$('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ Tetapan</h2></div><div class="notice warn">Panel ini untuk Admin (pengusaha) sahaja.</div>';return}
+  if(me.role!=='admin'){$('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ Settings</h2></div><div class="notice warn">Panel ini untuk Admin (pengusaha) sahaja.</div>';return}
   const f=(id,lb,val,step)=>'<label class="field"><span>'+lb+'</span><input type="number" id="'+id+'" value="'+val+'" step="'+(step||'0.01')+'" min="0"></label>';
-  $('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ Tetapan Sistem (Admin)</h2></div>'+
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>⚙️ System Settings (Admin)</h2></div>'+
   '<div class="card glass"><h3>💰 Kadar Gaji, Bonus &amp; Elaun</h3><div class="formgrid">'+
   f('stBase','Kadar asas / jam (RM)',S.baseRate)+f('stHigh','Kadar tinggi / jam (RM)',S.highRate)+
   f('stWk','Sasaran jualan weekday (RM)',S.weekdayThreshold)+f('stWknd','Sasaran jualan weekend (RM)',S.weekendThreshold)+
@@ -2423,7 +2423,7 @@ function renderMSettings(){
 }
 function renderMAudit(){
   const rows=DB.audit.slice(0,150);
-  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📜 Log Audit Sistem</h2></div>'+
+  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📜 Audit Log</h2></div>'+
   '<div class="card glass"><div class="tblwrap"><table class="tbl"><tr><th>Masa</th><th>Pengguna</th><th>Tindakan</th><th>Butiran</th></tr>'+
   rows.map(a=>'<tr><td>'+new Date(a.t).toLocaleString('ms-MY')+'</td><td>'+esc(a.by)+'</td><td>'+esc(a.action)+'</td><td>'+esc(a.detail||'')+'</td></tr>').join('')+'</table></div></div>'+
   '<p class="hint">Termasuk tindakan baharu: <b>mgr_assign</b> / <b>mgr_unassign</b> (tugasan manager, ditanda jika tarikh lampau) &amp; <b>schedule_publish</b> ikut tempoh.</p>';
@@ -2792,7 +2792,7 @@ function renderMConsign(){
   const totalPaid=payments.reduce((s,p)=>s+p.totalAmount,0);
 
   // Hero header with gradient
-  let html='<div class="pagehead"><h2>📦 Pengurusan Konsain</h2></div>';
+  let html='<div class="pagehead"><h2>📦 Consignment Management</h2></div>';
 
   // Summary stat cards (4-grid)
   html+='<div class="consign-stats">'+
