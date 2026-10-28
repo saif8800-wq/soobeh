@@ -2043,7 +2043,7 @@ function exportExpensesPDF(){
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Syif Request'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'tukar',ic:'🔄',lb:'Syif Swap'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'laporan',ic:'📈',lb:'Punch Card'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Syif Request'},{k:'jad',ic:'🗓️',lb:'Jadual & Assign'},{k:'jual',ic:'💰',lb:'Jualan'},{k:'tukar',ic:'🔄',lb:'Syif Swap'},{k:'tugasan',ic:'📋',lb:'Tugasan'},{k:'laporan',ic:'📈',lb:'Punch Card'},{k:'gaji',ic:'🧾',lb:'Gaji'},{k:'staf',ic:'👥',lb:'Staf'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Kewangan'},{k:'belanja',ic:'💸',lb:'Belanja'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
