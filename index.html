@@ -353,6 +353,51 @@ details.demo .inner{padding:0 16px 14px}
 .stat b{font-size:17px;font-weight:800}
 .ps-totalbox{border:1.5px solid #000;padding:8px;display:flex;justify-content:space-between;font-size:13px;font-weight:800;margin-top:8px}
 
+/* EOTM (Employee of the Month) popup & list styles */
+.eotm-overlay{display:flex;align-items:center;justify-content:center;min-height:100%;padding:20px}
+.eotm-popup{
+  max-width:420px;width:100%;text-align:center;padding:36px 24px;border-radius:20px;
+  background:linear-gradient(180deg,rgba(229,115,115,.15),rgba(255,255,255,.05));
+  border:1px solid rgba(229,115,115,.30);
+  box-shadow:0 12px 48px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.10);
+  backdrop-filter:blur(20px) saturate(150%);
+  position:relative;overflow:hidden;
+}
+.eotm-glow{
+  position:absolute;top:-60px;left:50%;transform:translateX(-50%);
+  width:200px;height:200px;border-radius:50%;
+  background:radial-gradient(circle,rgba(229,115,115,.3),transparent 70%);
+  filter:blur(40px);pointer-events:none;
+}
+.eotm-avatar{
+  width:100px;height:100px;border-radius:50%;margin:0 auto 14px;
+  background:linear-gradient(135deg,#e57373,#ba68c8);
+  display:flex;align-items:center;justify-content:center;
+  font-size:42px;font-weight:800;color:#fff;overflow:hidden;
+  border:3px solid rgba(255,255,255,.25);
+  box-shadow:0 8px 24px rgba(229,115,115,.35);
+  position:relative;z-index:1;
+}
+.eotm-avatar img{width:100%;height:100%;object-fit:cover}
+.eotm-stars{font-size:28px;margin-bottom:6px;position:relative;z-index:1}
+.eotm-title{
+  font-family:'Poppins',sans-serif;font-size:20px;font-weight:800;
+  letter-spacing:.05em;margin:0 0 4px;color:#ffcdd2;position:relative;z-index:1;
+}
+.eotm-month{font-size:14px;opacity:.7;margin-bottom:8px;position:relative;z-index:1}
+.eotm-name{
+  font-family:'Poppins',sans-serif;font-size:22px;font-weight:700;
+  margin:8px 0 12px;color:#fff;position:relative;z-index:1;
+}
+.eotm-msg{
+  font-size:14px;line-height:1.6;opacity:.85;margin:12px 20px 16px;
+  position:relative;z-index:1;
+}
+.eotm-sign{
+  font-size:13px;opacity:.65;font-style:italic;margin-top:12px;
+  position:relative;z-index:1;
+}
+
 </style>
 </head>
 <body>
@@ -406,7 +451,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[]}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[]}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -488,6 +533,11 @@ async function loadAll(){
   DB.offerLetterTemplate=olt.data?{title:olt.data.title,contentHtml:olt.data.content_html,updatedAt:Date.parse(olt.data.updated_at)}:null;
   const ola=await SB.from('offer_letter_agreements').select('*').order('assigned_at',{ascending:false}).limit(200);
   DB.offerLetterAgreements=(ola.data||[]).map(mapOfferLetterAgreement);
+  // EOTM (ALL users)
+  const eotm=await SB.from('eotm_announcements').select('*').order('month_key',{ascending:false}).limit(100);
+  DB.eotmAnnouncements=(eotm.data||[]).map(mapEOTMAnnouncement);
+  const eotmV=await SB.from('eotm_viewed').select('*').limit(500);
+  DB.eotmViewed=(eotmV.data||[]).map(mapEOTMViewed);
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
@@ -1261,7 +1311,8 @@ function render(){
   else{const u=currentUser();
     if(!u){ROUTE.view='landing';return render();}
     if(u.role==='staff'){ROUTE.view='staff';renderStaffShell();}
-    else{ROUTE.view='manager';renderManagerShell();}}
+    else{ROUTE.view='manager';renderManagerShell();}
+    setTimeout(checkEOTMPopup,800);}
 }
 function goLogin(p){ROUTE=Object.assign(freshROUTE(),{view:'login',portal:p});pinBuf='';render();}
 function goBackLanding(){ROUTE.view='landing';render();}
@@ -1346,7 +1397,7 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
-const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Calendar'},{k:'hadir',ic:'📍',lb:'Attendance'},{k:'jad',ic:'🗓️',lb:'Schedule'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'slip',ic:'🧾',lb:'Payslip'},{k:'prof',ic:'👤',lb:'Profile'}];
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Calendar'},{k:'hadir',ic:'📍',lb:'Attendance'},{k:'jad',ic:'🗓️',lb:'Schedule'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'slip',ic:'🧾',lb:'Payslip'},{k:'prof',ic:'👤',lb:'Profile'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
 function renderStaffShell(){
   const u=currentUser();
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
@@ -1356,7 +1407,7 @@ function renderStaffShell(){
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<main class="wrap"><div id="viewRoot"></div></main>'+
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
-({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tugasan:renderStaffTasks,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,jual:renderSales}[ROUTE.tab])();
+({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tugasan:renderStaffTasks,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,eotm:renderEOTM,jual:renderSales}[ROUTE.tab])();
 }
 function slotPill(ds,shift,pub,locked){
   const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
@@ -2098,7 +2149,7 @@ function exportExpensesPDF(){
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Booking'},{k:'jad',ic:'🗄️',lb:'Schedule'},{k:'jual',ic:'💰',lb:'Sales'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'laporan',ic:'📈',lb:'Attendance'},{k:'gaji',ic:'🧾',lb:'Payroll'},{k:'staf',ic:'👥',lb:'Staff'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Finance'},{k:'belanja',ic:'💸',lb:'Expenses'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Booking'},{k:'jad',ic:'🗄️',lb:'Schedule'},{k:'jual',ic:'💰',lb:'Sales'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'laporan',ic:'📈',lb:'Attendance'},{k:'gaji',ic:'🧾',lb:'Payroll'},{k:'staf',ic:'👥',lb:'Staff'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Finance'},{k:'belanja',ic:'💸',lb:'Expenses'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -2115,7 +2166,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,consign:renderMConsign,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,consign:renderMConsign,eotm:renderEOTM,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
@@ -4020,6 +4071,188 @@ async function submitResignStaff(staffId){
   if(error)return toast(friendly(error),'err');
   closeModal();await sync();render();
   toast('Staf '+s.name+' ditandakan berhenti ✔ — sila assign staf lain ke slot kosong','ok');
+}
+
+
+/* ---------- 17i. EOTM MODULE (Employee of the Month) ---------- */
+// Mappers
+const mapEOTMAnnouncement=r=>({
+  id:r.id,
+  staffId:r.staff_id,
+  monthKey:r.month_key,
+  year:r.year,
+  monthName:r.month_name,
+  message:r.message||'',
+  ownerName:r.owner_name||'Nur Izzah binti Zainuddin',
+  createdBy:r.created_by,
+  createdAt:r.created_at?Date.parse(r.created_at):null
+});
+
+const mapEOTMViewed=r=>({
+  announcementId:r.announcement_id,
+  userId:r.user_id,
+  viewedAt:r.viewed_at?Date.parse(r.viewed_at):null
+});
+
+// Helper: cari EOTM untuk bulan tertentu
+function eotmForMonth(mk){
+  return (DB.eotmAnnouncements||[]).find(a=>a.monthKey===mk)||null;
+}
+
+// Helper: dapatkan EOTM yang user BELUM tengok (untuk popup)
+function unviewedEOTM(){
+  const viewed=new Set((DB.eotmViewed||[]).filter(v=>v.userId===ME.id).map(v=>v.announcementId));
+  return (DB.eotmAnnouncements||[]).filter(a=>!viewed.has(a.id));
+}
+
+// ===== RENDER: EOTM tab (manager & staff) =====
+function renderEOTM(){
+  const me=currentUser();if(!me)return;
+  const isMgr=['manager','admin'].includes(me.role);
+  const list=(DB.eotmAnnouncements||[]).slice().sort((a,b)=>b.monthKey.localeCompare(a.monthKey));
+
+  let html='<div class="pagehead"><h2>\u2b50 Employee of the Month</h2>';
+  if(isMgr){
+    html+='<button class="btn btn-primary btn-sm" onclick="openSelectEOTMModal()">\u2795 Select EOTM</button>';
+  }
+  html+='</div>';
+
+  // Manager: select button info
+  if(isMgr&&!list.length){
+    html+='<div class="card glass"><div class="empty-state"><div class="empty-ic">\u2b50</div>'+
+      '<h3>No EOTM Yet</h3>'+
+      '<p>Select the first Employee of the Month to recognize outstanding staff performance.</p>'+
+      '<button class="btn btn-primary" onclick="openSelectEOTMModal()">\u2795 Select EOTM</button></div></div>';
+  }
+
+  // Group by year
+  if(list.length){
+    const years={};
+    list.forEach(a=>{
+      if(!years[a.year])years[a.year]=[];
+      years[a.year].push(a);
+    });
+    Object.keys(years).sort((a,b)=>b-a).forEach(yr=>{
+      html+='<div class="card glass"><h3 style="margin-bottom:10px">'+yr+'</h3>'+
+        '<div class="tblwrap"><table class="tbl"><tr><th>Month</th><th>Employee</th></tr>'+
+        years[yr].map(a=>{
+          const staff=DB.users.find(u=>u.id===a.staffId);
+          const avatar=staff&&staff.avatarUrl?
+            '<div class="avatar sm" style="display:inline-flex;vertical-align:middle"><img src="'+esc(staff.avatarUrl)+'" alt="avatar"></div>':
+            '<div class="avatar sm" style="display:inline-flex;vertical-align:middle">'+esc((staff?staff.name:'?').charAt(0).toUpperCase())+'</div>';
+          return '<tr><td><b>'+esc(a.monthName)+'</b></td>'+
+            '<td style="display:flex;align-items:center;gap:8px">'+avatar+
+            '<div><b>'+(staff?esc(staff.name):'?')+'</b><br><small style="opacity:.55">@'+esc(staff?staff.username:'?')+'</small></div></td></tr>';
+        }).join('')+
+        '</table></div></div>';
+    });
+  }
+
+  $('#viewRoot').innerHTML=html;
+}
+
+// ===== MANAGER: Select EOTM modal =====
+function openSelectEOTMModal(){
+  const me=reqMgr();if(!me)return;
+  const staff=DB.users.filter(u=>u.role==='staff'&&u.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!staff.length){openModal('No Active Staff','<p>No active staff to select from.</p>');return}
+
+  // Get current month & recent months
+  const today=new Date();
+  const mk=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
+  const prevMonth=new Date(today.getFullYear(),today.getMonth()-1,1);
+  const prevMk=prevMonth.getFullYear()+'-'+String(prevMonth.getMonth()+1).padStart(2,'0');
+
+  // Check which months already have EOTM
+  const takenMonths=new Set((DB.eotmAnnouncements||[]).map(a=>a.monthKey));
+
+  // Eligible staff (same criteria as performance bonus — sales > threshold, not pemohon of approved swap)
+  const eligibleStaff=staff.filter(s=>{
+    const perf=perfEligible(s.id,mk);
+    return perf.ok;
+  });
+
+  let html='<div class="notice info">EOTM criteria = eligible for Performance Bonus (sales > RM'+DB.settings.monthlySalesThreshold+', not swap pemohon).</div>'+
+    '<label class="field"><span>Month *</span><select id="eotmMonth">'+
+    '<option value="'+mk+'"'+(takenMonths.has(mk)?' disabled':'')+'>Current Month ('+mk+')</option>'+
+    '<option value="'+prevMk+'"'+(takenMonths.has(prevMk)?' disabled':'')+'>Previous Month ('+prevMk+')</option>'+
+    '</select></label>'+
+    '<label class="field"><span>Employee *</span><select id="eotmStaff">'+
+    (eligibleStaff.length?eligibleStaff:staff).map(s=>
+      '<option value="'+s.id+'">'+esc(s.name)+' (@'+esc(s.username)+')'+(eligibleStaff.includes(s)?' \u2014 eligible':'')+'</option>'
+    ).join('')+
+    '</select></label>'+
+    '<label class="field"><span>Congratulations Message</span>'+
+    '<textarea id="eotmMsg" rows="4" placeholder="Tahniah! Anda telah dipilih sebagai Employee of the Month kerana...">Tahniah! Anda telah dipilih sebagai Employee of the Month kerana prestasi cemerlang dan komitmen yang tinggi. Teruskan usaha yang baik!</textarea></label>'+
+    '<label class="field"><span>Owner Signature Name</span>'+
+    '<input id="eotmOwner" value="Nur Izzah binti Zainuddin" placeholder="Owner name"></label>'+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-primary btn-big" onclick="submitEOTM()">\u2b50 Select as EOTM</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Cancel</button></div>';
+  openModal('\u2b50 Select Employee of the Month',html);
+}
+
+async function submitEOTM(){
+  const me=reqMgr();if(!me)return;
+  const monthKey=$('#eotmMonth').value;
+  const staffId=$('#eotmStaff').value;
+  const msg=($('#eotmMsg')||{}).value||'';
+  const owner=($('#eotmOwner')||{}).value||'Nur Izzah binti Zainuddin';
+  if(!monthKey||!staffId)return toast('Please select month and employee','err');
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {data,error}=await SB.rpc('select_eotm',{p_staff_id:staffId,p_month_key:monthKey,p_message:msg.trim(),p_owner_name:owner.trim()});
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  closeModal();await sync();render();
+  toast('EOTM selected! All users will see the announcement.','ok');
+}
+
+// ===== POPUP: Show EOTM announcement (auto on login) =====
+function checkEOTMPopup(){
+  if(!ME)return;
+  const unviewed=unviewedEOTM();
+  if(!unviewed.length)return;
+  // Show the most recent unviewed announcement
+  const ann=unviewed[0];
+  const staff=DB.users.find(u=>u.id===ann.staffId);
+  if(!staff)return;
+  showEOTMPopup(ann,staff);
+}
+
+function showEOTMPopup(ann,staff){
+  const avatarHtml=staff.avatarUrl?
+    '<img src="'+esc(staff.avatarUrl)+'" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':
+    esc((staff.name||'?').charAt(0).toUpperCase());
+
+  const html='<div class="eotm-popup">'+
+    '<div class="eotm-glow"></div>'+
+    '<div class="eotm-avatar">'+avatarHtml+'</div>'+
+    '<div class="eotm-stars">\u2b50 \u2b50 \u2b50</div>'+
+    '<h2 class="eotm-title">EMPLOYEE OF THE MONTH</h2>'+
+    '<div class="eotm-month">'+esc(ann.monthName)+'</div>'+
+    '<div class="eotm-name">'+esc(staff.name)+'</div>'+
+    '<div class="eotm-msg">'+esc(ann.message)+'</div>'+
+    '<div class="eotm-sign">\u2014 '+esc(ann.ownerName)+', Owner</div>'+
+    '<button class="btn btn-primary btn-big" style="margin-top:16px" onclick="dismissEOTMPopup(\''+ann.id+'\')">Tutup</button>'+
+    '</div>';
+
+  // Use special modal with celebration styling
+  const r=$('#modalRoot');
+  r.innerHTML='<div class="eotm-overlay" onclick="if(event.target===this)dismissEOTMPopup(\''+ann.id+'\')">'+html+'</div>';
+  r.classList.add('open');
+}
+
+async function dismissEOTMPopup(annId){
+  // Mark as viewed
+  try{
+    await SB.rpc('dismiss_eotm',{p_announcement_id:annId});
+    // Update local cache
+    if(!DB.eotmViewed)DB.eotmViewed=[];
+    DB.eotmViewed.push({announcementId:annId,userId:ME.id,viewedAt:Date.now()});
+  }catch(e){}
+  closeModal();
+  // Check if there are more unviewed
+  setTimeout(checkEOTMPopup,300);
 }
 
 
