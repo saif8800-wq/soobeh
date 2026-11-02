@@ -4530,9 +4530,10 @@ function renderQuotes(){
     '</div></div>';
 
   // My quotes
-  if(myQuotes.length){
-    html+='<h3 class="consign-section-title">📝 My Quotes ('+myQuotes.length+')</h3>';
-    html+=myQuotes.map(q=>{
+  const myRecent=myQuotes.slice(0,5);
+  if(myRecent.length){
+    html+='<h3 class="consign-section-title">📝 My Recent Quotes ('+myRecent.length+')</h3>';
+    html+=myRecent.map(q=>{
       const m=moodInfo(q.mood);
       return '<div class="card glass quote-card">'+
         '<div class="quote-header">'+
@@ -4545,30 +4546,7 @@ function renderQuotes(){
     }).join('');
   }
 
-  // Manager: see all quotes
-  if(isMgr&&allQuotes.length>myQuotes.length){
-    const otherQuotes=allQuotes.filter(q=>q.userId!==me.id);
-    html+='<h3 class="consign-section-title">👥 All Quotes ('+allQuotes.length+')</h3>';
-    html+=otherQuotes.map(q=>{
-      const author=DB.users.find(u=>u.id===q.userId);
-      const m=moodInfo(q.mood);
-      const avatar=author&&author.avatarUrl?
-        '<div class="avatar sm" style="display:inline-flex;vertical-align:middle;width:28px;height:28px;font-size:12px"><img src="'+esc(author.avatarUrl)+'" alt=""></div>':
-        '<div class="avatar sm" style="display:inline-flex;vertical-align:middle;width:28px;height:28px;font-size:12px">'+esc((author?author.name:'?').charAt(0).toUpperCase())+'</div>';
-      return '<div class="card glass quote-card">'+
-        '<div class="quote-header">'+
-        avatar+
-        '<span style="font-size:13px;font-weight:600">'+esc(author?author.name:'?')+'</span>'+
-        '<span class="chip chip-info" style="font-size:10px">'+m.ic+'</span>'+
-        '<small style="opacity:.55">'+relTime(q.createdAt)+'</small>'+
-        '<button class="btn btn-sm btn-danger" style="padding:2px 8px" onclick="delQuote(\''+q.id+'\')" title="Delete">🗑</button>'+
-        '</div>'+
-        '<p class="quote-text">'+esc(q.content)+'</p>'+
-        '</div>';
-    }).join('');
-  }
-
-  if(!allQuotes.length){
+  if(!myRecent.length){
     html+='<div class="empty-state glass"><div class="empty-ic">💬</div><h3>No Quotes Yet</h3><p>Be the first to share a thought!</p></div>';
   }
 
