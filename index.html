@@ -627,7 +627,7 @@ function freshROUTE(){return {view:'landing',portal:'staff',tab:'cal',mtab:'dash
 async function logout(msg){
   if(ME)await logAudit('logout',ME.username);
   try{await SB.auth.signOut()}catch(e){}
-  ME=null;DB=emptyDB();ROUTE=freshROUTE();pinBuf='';render();if(msg)toast(msg,'info');
+  unsubscribeQuotes();ME=null;DB=emptyDB();ROUTE=freshROUTE();pinBuf='';render();if(msg)toast(msg,'info');
 }
 function startIdleWatch(){let last=Date.now();
   ['click','keydown','touchstart','pointerdown'].forEach(ev=>document.addEventListener(ev,()=>{last=Date.now()},{capture:true,passive:true}));
@@ -1383,7 +1383,8 @@ function render(){
     else{ROUTE.view='manager';renderManagerShell();}
     setTimeout(checkEOTMPopup,800);
     setTimeout(checkBirthdayPopup,2000);
-    setTimeout(checkOfferLetterPopup,3000);}
+    setTimeout(checkOfferLetterPopup,3000);
+    subscribeQuotes();}
 }
 function goLogin(p){ROUTE=Object.assign(freshROUTE(),{view:'login',portal:p});pinBuf='';render();}
 function goBackLanding(){ROUTE.view='landing';render();}
@@ -4626,6 +4627,39 @@ function quotesDashboardHTML(){
   return html;
 }
 
+
+// ===== QUOTES REALTIME (live stream) =====
+let quotesChannel=null;
+function subscribeQuotes(){
+  if(quotesChannel)return;
+  try{
+    quotesChannel=SB.channel('quotes-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'quotes'},(payload)=>{
+        if(payload.eventType==='INSERT'&&payload.new){
+          const nq=mapQuote(payload.new);
+          if(!DB.quotes)DB.quotes=[];
+          if(!DB.quotes.find(q=>q.id===nq.id)){
+            DB.quotes.unshift(nq);
+            DB.quotes=DB.quotes.slice(0,10);
+            render();
+          }
+        }else if(payload.eventType==='DELETE'&&payload.old){
+          if(DB.quotes){
+            const before=DB.quotes.length;
+            DB.quotes=DB.quotes.filter(q=>q.id!==payload.old.id);
+            if(DB.quotes.length!==before)render();
+          }
+        }
+      })
+      .subscribe();
+  }catch(e){}
+}
+function unsubscribeQuotes(){
+  if(quotesChannel){
+    try{SB.removeChannel(quotesChannel)}catch(e){}
+    quotesChannel=null;
+  }
+}
 
 /* ---------- 18. BOOT (dengan paparan ralat) ---------- */
 window.addEventListener('error',e=>showFatal(e.message));
