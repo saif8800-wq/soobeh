@@ -398,6 +398,51 @@ details.demo .inner{padding:0 16px 14px}
   position:relative;z-index:1;
 }
 
+/* Birthday popup styles */
+.bday-overlay{display:flex;align-items:center;justify-content:center;min-height:100%;padding:20px}
+.bday-popup{
+  max-width:400px;width:100%;text-align:center;padding:34px 22px;border-radius:20px;
+  background:linear-gradient(180deg,rgba(255,183,77,.15),rgba(255,255,255,.05));
+  border:1px solid rgba(255,183,77,.30);
+  box-shadow:0 12px 48px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.10);
+  backdrop-filter:blur(20px) saturate(150%);
+  position:relative;overflow:hidden;
+}
+.bday-glow{
+  position:absolute;top:-50px;left:50%;transform:translateX(-50%);
+  width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,183,77,.25),transparent 70%);
+  filter:blur(35px);pointer-events:none;
+}
+.bday-cake{font-size:36px;margin-bottom:10px;position:relative;z-index:1}
+.bday-avatar{
+  width:90px;height:90px;border-radius:50%;margin:0 auto 12px;
+  background:linear-gradient(135deg,#ffb74d,#ff8a65);
+  display:flex;align-items:center;justify-content:center;
+  font-size:38px;font-weight:800;color:#fff;overflow:hidden;
+  border:3px solid rgba(255,255,255,.25);
+  box-shadow:0 8px 24px rgba(255,183,77,.30);
+  position:relative;z-index:1;
+}
+.bday-avatar img{width:100%;height:100%;object-fit:cover}
+.bday-title{
+  font-family:'Poppins',sans-serif;font-size:22px;font-weight:800;
+  margin:0 0 4px;color:#ffe0b2;position:relative;z-index:1;
+}
+.bday-greeting{font-size:14px;opacity:.75;margin-bottom:6px;position:relative;z-index:1}
+.bday-name{
+  font-family:'Poppins',sans-serif;font-size:20px;font-weight:700;
+  margin:6px 0 10px;color:#fff;position:relative;z-index:1;
+}
+.bday-msg{
+  font-size:14px;line-height:1.6;opacity:.85;margin:10px 16px 12px;
+  position:relative;z-index:1;
+}
+.bday-sign{
+  font-size:13px;opacity:.65;font-style:italic;margin-top:10px;
+  position:relative;z-index:1;
+}
+
 </style>
 </head>
 <body>
@@ -451,11 +496,11 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[]}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
-const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||'',icNumber:r.ic_number||'',bankName:r.bank_name||'',bankAccount:r.bank_account||'',resignedAt:r.resigned_at?Date.parse(r.resigned_at):null,resignationDate:r.resignation_date||null,resignationReason:r.resignation_reason||'',emergencyName:r.emergency_name||'',emergencyRelationship:r.emergency_relationship||'',emergencyAddress:r.emergency_address||'',emergencyPhone:r.emergency_phone||''});
+const mapProfile=r=>({id:r.id,username:r.username,name:r.name,phone:r.phone||'—',role:r.role,payCycle:r.pay_cycle,typhoidCount:r.typhoid_count,active:r.active,defaultHours:r.default_hours!=null?+r.default_hours:null,address:r.address||'',avatarUrl:r.avatar_url||'',maritalStatus:r.marital_status||'',icNumber:r.ic_number||'',bankName:r.bank_name||'',bankAccount:r.bank_account||'',resignedAt:r.resigned_at?Date.parse(r.resigned_at):null,resignationDate:r.resignation_date||null,resignationReason:r.resignation_reason||'',emergencyName:r.emergency_name||'',emergencyRelationship:r.emergency_relationship||'',emergencyAddress:r.emergency_address||'',emergencyPhone:r.emergency_phone||'',birthDate:r.birth_date||''});
 function usernameOf(id){if(!id)return null;const u=DB.users.find(x=>x.id===id);return u?u.username:null}
 const mapBooking=(r)=>({id:r.id,staffId:r.staff_id,date:r.date,shift:r.shift,status:r.status,t:Date.parse(r.created_at),by:usernameOf(r.decided_by)});
 const mapSchedule=(r)=>({id:r.id,monthKey:r.date.slice(0,7),date:r.date,shift:r.shift,staffId:r.staff_id,noShow:r.no_show,hours:r.hours!=null?+r.hours:null});
@@ -538,6 +583,9 @@ async function loadAll(){
   DB.eotmAnnouncements=(eotm.data||[]).map(mapEOTMAnnouncement);
   const eotmV=await SB.from('eotm_viewed').select('*').limit(500);
   DB.eotmViewed=(eotmV.data||[]).map(mapEOTMViewed);
+  // Birthday template
+  const bdt=await SB.from('birthday_template').select('*').eq('id',1).maybeSingle();
+  DB.birthdayTemplate=bdt.data?mapBirthdayTemplate(bdt.data):null;
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
@@ -1312,7 +1360,8 @@ function render(){
     if(!u){ROUTE.view='landing';return render();}
     if(u.role==='staff'){ROUTE.view='staff';renderStaffShell();}
     else{ROUTE.view='manager';renderManagerShell();}
-    setTimeout(checkEOTMPopup,800);}
+    setTimeout(checkEOTMPopup,800);
+    setTimeout(checkBirthdayPopup,2000);}
 }
 function goLogin(p){ROUTE=Object.assign(freshROUTE(),{view:'login',portal:p});pinBuf='';render();}
 function goBackLanding(){ROUTE.view='landing';render();}
@@ -1591,6 +1640,8 @@ function renderStaffProfile(){
   '<div class="card glass"><h3>🏦 Maklumat Perbankan</h3>'+
   '<div class="detailrow"><span>Nama Bank</span><b>'+(u.bankName?esc(u.bankName):'— belum diisi')+'</b></div>'+
   '<div class="detailrow"><span>No. Akaun</span><b>'+(u.bankAccount?esc(u.bankAccount):'— belum diisi')+'</b></div></div>'+
+  '<div class="card glass"><h3>🎂 Maklumat Peribadi</h3>'+
+  '<div class="detailrow"><span>Tarikh Lahir</span><b>'+(u.birthDate?esc(u.birthDate):'— belum diisi')+'</b></div></div>'+
   '<div class="card glass"><h3>Tukar PIN</h3>'+
   '<label class="field"><span>PIN semasa</span><input id="pinCur" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
   '<label class="field"><span>PIN baharu (4–6 digit)</span><input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>'+
@@ -2666,6 +2717,7 @@ function openEditProfile(id){
   '<h3 style="margin-top:14px">🏦 Maklumat Perbankan</h3>'+
   '<label class="field"><span>Nama Bank / E-Wallet</span><select id="epBankName"><option value=""'+(target.bankName===''?' selected':'')+'>— Pilih —</option>'+['MayBank','CIMB Bank','RHB Bank','Public Bank','Bank Islam','Bank Rakyat','AmBank','Hong Leong Bank','Affin Bank','Bank Muamalat','Agro Bank','BSN (Bank Simpanan Nasional)','Touch n Go eWallet','ShopeePay','GrabPay','Boost','BigPay','MAE by Maybank','Alliance Bank','Standard Chartered'].map(b=>'<option value="'+b+'"'+(target.bankName===b?' selected':'')+'>'+b+'</option>').join('')+'</select></label>'+
   '<label class="field"><span>No. Akaun Bank / E-Wallet</span><input id="epBankAcc" value="'+esc(target.bankAccount||'')+'" placeholder="cth: 1234567890123"></label>'
+  '<label class="field"><span>🎂 Tarikh Lahir</span><input type="date" id="epBirthDate" value="'+esc(target.birthDate||'')+'"></label>'
   // Manager edit: tambah field role/pay_cycle/active
   if(isMgrEdit){
     html+='<h3 style="margin-top:14px">🔑 Tetapan Akaun (Manager)</h3>'+
@@ -2728,9 +2780,10 @@ async function saveProfileEdit(id){
   const emergencyPhone=($('#epEmgPhone')||{}).value||'';
   const bankName=($('#epBankName')||{}).value||'';
   const bankAcc=($('#epBankAcc')||{}).value||'';
+  const birthDate=($('#epBirthDate')||{}).value||'';
   const avatar=window._avatarData||'';
   if(name.trim().length<2)return toast('Nama mesti sekurang-kurangnya 2 aksara','err');
-  let payload={p_name:name.trim(),p_phone:phone.trim(),p_address:address.trim(),p_avatar:avatar,p_marital:marital,p_emergency_name:emergencyName.trim(),p_emergency_relationship:emergencyRel,p_emergency_address:emergencyAddr.trim(),p_emergency_phone:emergencyPhone.trim(),p_bank_name:bankName,p_bank_account:bankAcc.trim()};
+  let payload={p_name:name.trim(),p_phone:phone.trim(),p_address:address.trim(),p_avatar:avatar,p_marital:marital,p_emergency_name:emergencyName.trim(),p_emergency_relationship:emergencyRel,p_emergency_address:emergencyAddr.trim(),p_emergency_phone:emergencyPhone.trim(),p_bank_name:bankName,p_bank_account:bankAcc.trim(),p_birth_date:birthDate||null};
   let rpc='update_my_profile';
   if(isMgrEdit){
     rpc='admin_update_profile';
@@ -4113,7 +4166,8 @@ function renderEOTM(){
 
   let html='<div class="pagehead"><h2>\u2b50 Employee of the Month</h2>';
   if(isMgr){
-    html+='<button class="btn btn-primary btn-sm" onclick="openSelectEOTMModal()">\u2795 Select EOTM</button>';
+    html+='<button class="btn btn-primary btn-sm" onclick="openSelectEOTMModal()">\u2795 Select EOTM</button>'+
+    '<button class="btn btn-sm" onclick="openBirthdayTemplateEditor()">\ud83c\udf82 Edit Birthday Template</button>';
   }
   html+='</div>';
 
@@ -4253,6 +4307,105 @@ async function dismissEOTMPopup(annId){
   closeModal();
   // Check if there are more unviewed
   setTimeout(checkEOTMPopup,300);
+}
+
+
+/* ---------- 17j. BIRTHDAY MODULE ---------- */
+// Mapper for birthday template
+const mapBirthdayTemplate=r=>({
+  title:r.title||'Happy Birthday!',
+  message:r.message||'Semoga panjang umur, sihat selalu, dan terus cemerlang!',
+  fromName:r.from_name||'Pengurusan Soobeh',
+  updatedAt:r.updated_at?Date.parse(r.updated_at):null
+});
+
+// Check if today is someone's birthday (compare MM-DD only, ignore year)
+function birthdayStaffToday(){
+  const todayMD=todayStr().slice(5); // "MM-DD"
+  return (DB.users||[]).filter(u=>{
+    if(!u.birthDate)return false;
+    return u.birthDate.slice(5)===todayMD; // compare month-day only
+  });
+}
+
+// ===== POPUP: Show birthday announcement (every login on birthday) =====
+function checkBirthdayPopup(){
+  if(!ME)return;
+  const birthdayStaff=birthdayStaffToday();
+  if(!birthdayStaff.length)return;
+
+  // Get template (use default if not loaded)
+  const tpl=DB.birthdayTemplate||{
+    title:'Happy Birthday!',
+    message:'Semoga panjang umur, sihat selalu, dan terus cemerlang dalam kerja. Terima kasih atas dedikasi anda!',
+    fromName:'Pengurusan Soobeh'
+  };
+
+  // Show popup for first birthday staff
+  showBirthdayPopup(birthdayStaff[0],tpl);
+}
+
+function showBirthdayPopup(staff,tpl){
+  // Replace {name} placeholder in message
+  let msg=tpl.message.replace(/\{name\}/g,staff.name);
+  const avatarHtml=staff.avatarUrl?
+    '<img src="'+esc(staff.avatarUrl)+'" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':
+    esc((staff.name||'?').charAt(0).toUpperCase());
+
+  const isMe=(staff.id===ME.id);
+  const greeting=isMe?'It\'s YOUR Birthday!':'Today is '+esc(staff.name.split(' ')[0])+'\'s Birthday!';
+
+  const html='<div class="bday-popup">'+
+    '<div class="bday-glow"></div>'+
+    '<div class="bday-cake">\xf0\x9f\x8e\x82 \xf0\x9f\x8e\x88 \xf0\x9f\x8e\x89</div>'+
+    '<div class="bday-avatar">'+avatarHtml+'</div>'+
+    '<h2 class="bday-title">'+esc(tpl.title)+'</h2>'+
+    '<div class="bday-greeting">'+greeting+'</div>'+
+    '<div class="bday-name">'+esc(staff.name)+'</div>'+
+    '<div class="bday-msg">'+esc(msg)+'</div>'+
+    '<div class="bday-sign">\xe2\x80\x94 '+esc(tpl.fromName)+'</div>'+
+    '<button class="btn btn-primary btn-big" style="margin-top:14px" onclick="closeModal()">Tutup</button>'+
+    '</div>';
+
+  // Use special modal with birthday styling
+  const r=$('#modalRoot');
+  r.innerHTML='<div class="bday-overlay" onclick="if(event.target===this)closeModal()">'+html+'</div>';
+  r.classList.add('open');
+}
+
+// ===== MANAGER: Edit birthday template =====
+function openBirthdayTemplateEditor(){
+  const me=reqMgr();if(!me)return;
+  const tpl=DB.birthdayTemplate||{title:'Happy Birthday!',message:'Semoga panjang umur...',fromName:'Pengurusan Soobeh'};
+  const html='<div class="notice info">Template ini akan dipakai untuk SEMUA ucapan birthday staf. Guna <code>{name}</code> untuk auto-ganti dengan nama staf.</div>'+
+    '<label class="field"><span>Title</span><input id="bdTitle" value="'+esc(tpl.title)+'" placeholder="Happy Birthday!"></label>'+
+    '<label class="field"><span>Message</span><textarea id="bdMsg" rows="4" placeholder="Semoga panjang umur, sihat selalu...">'+esc(tpl.message)+'</textarea></label>'+
+    '<label class="field"><span>From (Signature)</span><input id="bdFrom" value="'+esc(tpl.fromName)+'" placeholder="Pengurusan Soobeh"></label>'+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-primary btn-big" onclick="saveBirthdayTemplate()">\xf0\x9f\x92\xbe Save Template</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Cancel</button></div>';
+  openModal('\xf0\x9f\x8e\x82 Edit Birthday Template',html);
+}
+
+async function saveBirthdayTemplate(){
+  const me=reqMgr();if(!me)return;
+  const title=($('#bdTitle')||{}).value||'Happy Birthday!';
+  const msg=($('#bdMsg')||{}).value||'';
+  const from=($('#bdFrom')||{}).value||'Pengurusan Soobeh';
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {error}=await SB.from('birthday_template').upsert({
+    id:1,
+    title:title.trim(),
+    message:msg.trim(),
+    from_name:from.trim(),
+    updated_by:me.id,
+    updated_at:new Date().toISOString()
+  });
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  await logAudit('birthday_template_upd','Title: '+title.trim());
+  closeModal();await sync();render();
+  toast('Birthday template saved!','ok');
 }
 
 
