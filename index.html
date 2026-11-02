@@ -4357,13 +4357,13 @@ function showBirthdayPopup(staff,tpl){
 
   const html='<div class="bday-popup">'+
     '<div class="bday-glow"></div>'+
-    '<div class="bday-cake">\xf0\x9f\x8e\x82 \xf0\x9f\x8e\x88 \xf0\x9f\x8e\x89</div>'+
+    '<div class="bday-cake">🎂 🎈 🎉</div>'+
     '<div class="bday-avatar">'+avatarHtml+'</div>'+
     '<h2 class="bday-title">'+esc(tpl.title)+'</h2>'+
     '<div class="bday-greeting">'+greeting+'</div>'+
     '<div class="bday-name">'+esc(staff.name)+'</div>'+
     '<div class="bday-msg">'+esc(msg)+'</div>'+
-    '<div class="bday-sign">\xe2\x80\x94 '+esc(tpl.fromName)+'</div>'+
+    '<div class="bday-sign">— '+esc(tpl.fromName)+'</div>'+
     '<button class="btn btn-primary btn-big" style="margin-top:14px" onclick="closeModal()">Tutup</button>'+
     '</div>';
 
@@ -4382,9 +4382,9 @@ function openBirthdayTemplateEditor(){
     '<label class="field"><span>Message</span><textarea id="bdMsg" rows="4" placeholder="Semoga panjang umur, sihat selalu...">'+esc(tpl.message)+'</textarea></label>'+
     '<label class="field"><span>From (Signature)</span><input id="bdFrom" value="'+esc(tpl.fromName)+'" placeholder="Pengurusan Soobeh"></label>'+
     '<div class="chips" style="margin-top:14px">'+
-    '<button class="btn btn-primary btn-big" onclick="saveBirthdayTemplate()">\xf0\x9f\x92\xbe Save Template</button>'+
+    '<button class="btn btn-primary btn-big" onclick="saveBirthdayTemplate()">💾 Save Template</button>'+
     '<button class="btn ghost" onclick="closeModal()">Cancel</button></div>';
-  openModal('\xf0\x9f\x8e\x82 Edit Birthday Template',html);
+  openModal('🎂 Edit Birthday Template',html);
 }
 
 async function saveBirthdayTemplate(){
