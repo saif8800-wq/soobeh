@@ -4144,7 +4144,8 @@ const mapEOTMAnnouncement=r=>({
 const mapEOTMViewed=r=>({
   announcementId:r.announcement_id,
   userId:r.user_id,
-  viewedAt:r.viewed_at?Date.parse(r.viewed_at):null
+  viewedAt:r.viewed_at?Date.parse(r.viewed_at):null,
+  viewCount:r.view_count||1
 });
 
 // Helper: cari EOTM untuk bulan tertentu
@@ -4154,8 +4155,12 @@ function eotmForMonth(mk){
 
 // Helper: dapatkan EOTM yang user BELUM tengok (untuk popup)
 function unviewedEOTM(){
-  const viewed=new Set((DB.eotmViewed||[]).filter(v=>v.userId===ME.id).map(v=>v.announcementId));
-  return (DB.eotmAnnouncements||[]).filter(a=>!viewed.has(a.id));
+  const viewed=(DB.eotmViewed||[]).filter(v=>v.userId===ME.id);
+  const viewedMap=new Map(viewed.map(v=>[v.announcementId,v.viewCount||1]));
+  return (DB.eotmAnnouncements||[]).filter(a=>{
+    const count=viewedMap.get(a.id)||0;
+    return count<2;
+  });
 }
 
 // ===== RENDER: EOTM tab (manager & staff) =====
@@ -4302,7 +4307,9 @@ async function dismissEOTMPopup(annId){
     await SB.rpc('dismiss_eotm',{p_announcement_id:annId});
     // Update local cache
     if(!DB.eotmViewed)DB.eotmViewed=[];
-    DB.eotmViewed.push({announcementId:annId,userId:ME.id,viewedAt:Date.now()});
+    const existing=DB.eotmViewed.find(v=>v.announcementId===annId&&v.userId===ME.id);
+    if(existing){existing.viewCount=(existing.viewCount||1)+1}
+    else{DB.eotmViewed.push({announcementId:annId,userId:ME.id,viewedAt:Date.now(),viewCount:1})}
   }catch(e){}
   closeModal();
   // Check if there are more unviewed
