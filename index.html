@@ -443,6 +443,24 @@ details.demo .inner{padding:0 16px 14px}
   position:relative;z-index:1;
 }
 
+/* Quotes D'Day styles */
+.mood-chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.mood-chip{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(245,237,233,.6);font-size:12px;font-weight:600;cursor:pointer;transition:.12s;font-family:inherit}
+.mood-chip:hover{background:rgba(255,255,255,.08)}
+.mood-chip.selected{background:linear-gradient(135deg,#e57373,#ef5350);color:#fff;border-color:transparent;box-shadow:0 3px 10px rgba(229,115,115,.3)}
+.quote-card{padding:12px 14px;margin:8px 0}
+.quote-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.quote-text{margin:6px 0 0;font-size:14px;line-height:1.6;opacity:.9;white-space:pre-wrap;word-break:break-word}
+.quotes-dash{margin-bottom:14px !important}
+.quotes-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.quote-dash-item{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.quote-avatar{flex:none;width:34px;height:34px;font-size:14px}
+.quote-avatar img{width:100%;height:100%;object-fit:cover}
+.quote-dash-content{flex:1;min-width:0}
+.quote-dash-text{font-size:13.5px;line-height:1.55;opacity:.9;white-space:pre-wrap;word-break:break-word}
+.quote-dash-meta{display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap}
+.quote-dash-name{font-size:12px;font-weight:700;opacity:.7}
+
 </style>
 </head>
 <body>
@@ -496,7 +514,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
 const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null}}
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null,quotes:[]}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -586,6 +604,9 @@ async function loadAll(){
   // Birthday template
   const bdt=await SB.from('birthday_template').select('*').eq('id',1).maybeSingle();
   DB.birthdayTemplate=bdt.data?mapBirthdayTemplate(bdt.data):null;
+  // Quotes (ALL users)
+  const qq=await SB.from('quotes').select('*').order('created_at',{ascending:false}).limit(10);
+  DB.quotes=(qq.data||[]).map(mapQuote);
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
@@ -1447,7 +1468,7 @@ function loginHTML(){const st=ROUTE.portal==='staff';
  '<p class="hint">Lupa PIN? Hubungi manager untuk set semula (tanpa OTP/emel).</p></div></div>';}
 
 /* ---------- 16. PORTAL STAFF ---------- */
-const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Calendar'},{k:'hadir',ic:'📍',lb:'Attendance'},{k:'jad',ic:'🗓️',lb:'Schedule'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'slip',ic:'🧾',lb:'Payslip'},{k:'prof',ic:'👤',lb:'Profile'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
+const STAFF_TABS=[{k:'cal',ic:'📅',lb:'Calendar'},{k:'quotes',ic:'💬',lb:'Quotes'},{k:'hadir',ic:'📍',lb:'Attendance'},{k:'jad',ic:'🗓️',lb:'Schedule'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'slip',ic:'🧾',lb:'Payslip'},{k:'prof',ic:'👤',lb:'Profile'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
 function renderStaffShell(){
   const u=currentUser();
   const tabs=STAFF_TABS.slice();if(DB.settings.allowStaffSales)tabs.splice(4,0,{k:'jual',ic:'💰',lb:'Jualan'});
@@ -1457,7 +1478,7 @@ function renderStaffShell(){
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<main class="wrap"><div id="viewRoot"></div></main>'+
   '<nav class="bottomnav glass">'+tabs.map(t=>'<button class="navbtn'+(ROUTE.tab===t.k?' active':'')+'" onclick="setTab(\''+t.k+'\')"><span class="ic">'+t.ic+'</span><small>'+t.lb+'</small></button>').join('')+'</nav>';
-({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tugasan:renderStaffTasks,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,eotm:renderEOTM,jual:renderSales}[ROUTE.tab])();
+({cal:renderStaffCalendar,hadir:renderStaffAttendance,jad:renderStaffJadual,tugasan:renderStaffTasks,tukar:renderStaffSwap,slip:renderStaffSlips,prof:renderStaffProfile,eotm:renderEOTM,quotes:renderQuotes,jual:renderSales}[ROUTE.tab])();
 }
 function slotPill(ds,shift,pub,locked){
   const ic=shift==='morning'?'☀':'🌙';let cls='free',mark='';
@@ -1488,7 +1509,7 @@ function renderStaffCalendar(){
     cells+='<div class="cal-cell'+(past?' past':'')+(locked?' locked':'')+'"><div class="cal-day">'+d+(ds===todayStr()?' •':'')+'</div>'+slotPill(ds,'morning',pub,locked)+slotPill(ds,'evening',pub,locked)+'</div>';}
   ensureSlotCounts(mk);
   const est=estimateFor(u.id);
-  $('#viewRoot').innerHTML=
+  $('#viewRoot').innerHTML=quotesDashboardHTML()+
   '<div class="pagehead"><h2>📅 My Shift Calendar</h2><div class="monthnav glass"><button onclick="calNav(-1)">◀</button><b>'+periodLabel(pk)+'</b><button onclick="calNav(1)">▶</button></div></div>'+
 
   (pub?'<div class="notice ok">🔒 Jadual rasmi tempoh ini telah dikeluarkan — <span class="chip chip-ok">✔ syif saya</span> <span class="chip">👥 bilangan staff</span>. Perubahan hanya melalui Pertukaran Syif.</div>'
@@ -2201,7 +2222,7 @@ function exportExpensesPDF(){
   setTimeout(()=>{try{window.print()}catch(e){}},120);
 }
 /* ---------- 17. PORTAL MANAGER & ADMIN ---------- */
-const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'temp',ic:'✅',lb:'Booking'},{k:'jad',ic:'🗄️',lb:'Schedule'},{k:'jual',ic:'💰',lb:'Sales'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'laporan',ic:'📈',lb:'Attendance'},{k:'gaji',ic:'🧾',lb:'Payroll'},{k:'staf',ic:'👥',lb:'Staff'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Finance'},{k:'belanja',ic:'💸',lb:'Expenses'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
+const MTABS=[{k:'dash',ic:'📊',lb:'Dashboard'},{k:'quotes',ic:'💬',lb:'Quotes'},{k:'temp',ic:'✅',lb:'Booking'},{k:'jad',ic:'🗄️',lb:'Schedule'},{k:'jual',ic:'💰',lb:'Sales'},{k:'tukar',ic:'🔄',lb:'Swap'},{k:'tugasan',ic:'📋',lb:'Tasks'},{k:'laporan',ic:'📈',lb:'Attendance'},{k:'gaji',ic:'🧾',lb:'Payroll'},{k:'staf',ic:'👥',lb:'Staff'},{k:'consign',ic:'📦',lb:'Consign'},{k:'kewangan',ic:'💵',lb:'Finance'},{k:'belanja',ic:'💸',lb:'Expenses'},{k:'eotm',ic:'⭐',lb:'EOTM'}];
 function openProfileModal(){const u=currentUser();
   openModal('👤 Profil — '+esc(u.name),
   '<div class="detailrow"><span>ID</span><b>'+esc(u.username)+'</b></div><div class="detailrow"><span>Peranan</span><b>'+esc(u.role)+'</b></div><div class="detailrow"><span>Telefon</span><b>'+esc(u.phone||'—')+'</b></div>'+
@@ -2218,7 +2239,7 @@ function renderManagerShell(){
   '<header class="appbar glass"><div class="brand"><div class="brandlogo"><img src="logo.png" alt="Soobeh"></div><div><b>Soobeh</b><small>Portal Manager'+(u.role==='admin'?' · Admin':'')+' — '+esc(u.name)+'</small></div></div>'+
   '<div class="appbar-actions"><button class="iconbtn" onclick="syncNow()" title="Muat semula data">⟳</button>'+bellHTML()+'<button class="iconbtn" onclick="openProfileModal()" title="Profil">👤</button><button class="iconbtn" onclick="logout()" title="Log Keluar">⏻</button></div></header>'+
   '<div class="wrap"><nav class="pillnav glass">'+tabs.map(t=>'<button class="pill'+(ROUTE.mtab===t.k?' active':'')+'" onclick="setMTab(\''+t.k+'\')">'+t.ic+' '+t.lb+'</button>').join('')+'</nav><div id="viewRoot"></div></div>';
-  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,consign:renderMConsign,eotm:renderEOTM,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
+  ({dash:renderMDash,temp:renderMBookings,jad:renderMSchedule,jual:renderSales,tukar:renderMSwaps,tugasan:renderMTasks,gaji:renderMPayroll,laporan:renderMReport,kewangan:renderMFinance,belanja:renderMExpenses,staf:renderMStaff,consign:renderMConsign,eotm:renderEOTM,quotes:renderQuotes,tetap:renderMSettings,log:renderMAudit}[ROUTE.mtab])();
 }
 function salesChartHTML(){
   const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(ymd(d))}
@@ -2234,7 +2255,7 @@ function renderMDash(){
   const swM=DB.swaps.filter(s=>s.status==='pending_manager').length;
   let est=0;
   const rows=staff.map(u=>{const sc=scheduledEntries(u.id,mk),att=sc.filter(e=>!e.noShow).length;est+=estimateFor(u.id).total;return {u:u,sc:sc.length,att:att,hours:att*S.shiftHours}});
-  $('#viewRoot').innerHTML='<div class="pagehead"><h2>📊 Manager Dashboard</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
+  $('#viewRoot').innerHTML=quotesDashboardHTML()+'<div class="pagehead"><h2>📊 Manager Dashboard</h2><span class="chip chip-info">'+monthLabel(mk)+'</span></div>'+
   '<div class="notice info">🗓️ Tempoh semasa: <b>'+periodLabel(cp)+'</b> — '+(periodPublished(cp)?'<span class="chip chip-ok">Diterbitkan</span>':'<span class="chip chip-wait">Belum diterbitkan</span>')+' · Staff boleh menempah hingga <b>'+dShort(bookingWindowEnd())+'</b> (tempoh semasa + seterusnya).</div>'+
   '<div class="statgrid">'+
   '<div class="card glass"><h3>📅 Kehadiran Bulan Semasa <small>+ penanda kitaran gaji (PRD 5.6a)</small></h3><div class="tblwrap"><table class="tbl"><tr><th>Staff</th><th>Kitaran</th><th>Syif</th><th>Hadir</th><th>Jam</th></tr>'+
@@ -4439,6 +4460,194 @@ function showOfferLetterPopup(agr){
     '</div>';
   openModal('📄 Offer Letter Waiting',html);
 }
+
+/* ---------- 17k. QUOTES D'DAY MODULE ---------- */
+// Mapper
+const mapQuote=r=>({
+  id:r.id,
+  userId:r.user_id,
+  content:r.content||'',
+  mood:r.mood||'neutral',
+  createdAt:r.created_at?Date.parse(r.created_at):null
+});
+
+// Mood definitions
+const QUOTE_MOODS=[
+  {v:'happy',ic:'😊',lb:'Happy'},
+  {v:'sad',ic:'😢',lb:'Sad'},
+  {v:'angry',ic:'😠',lb:'Angry'},
+  {v:'inspired',ic:'✨',lb:'Inspired'},
+  {v:'thinking',ic:'🤔',lb:'Thinking'},
+  {v:'tired',ic:'😴',lb:'Tired'},
+  {v:'motivated',ic:'🔥',lb:'Motivated'},
+  {v:'calm',ic:'😌',lb:'Calm'},
+  {v:'excited',ic:'🎉',lb:'Excited'},
+  {v:'grateful',ic:'🙏',lb:'Grateful'},
+  {v:'neutral',ic:'😐',lb:'Neutral'}
+];
+
+function moodInfo(m){
+  return QUOTE_MOODS.find(m2=>m2.v===m)||QUOTE_MOODS[QUOTE_MOODS.length-1];
+}
+
+// Helper: format relative time
+function relTime(ts){
+  if(!ts)return '';
+  const diff=Date.now()-ts;
+  const min=Math.floor(diff/60000);
+  if(min<1)return 'just now';
+  if(min<60)return min+'m ago';
+  const hr=Math.floor(min/60);
+  if(hr<24)return hr+'h ago';
+  const day=Math.floor(hr/24);
+  if(day<7)return day+'d ago';
+  return new Date(ts).toLocaleDateString('ms-MY');
+}
+
+// ===== RENDER: Quotes tab (input form + user's quotes) =====
+function renderQuotes(){
+  const me=currentUser();if(!me)return;
+  const isMgr=['manager','admin'].includes(me.role);
+  const allQuotes=(DB.quotes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
+  const myQuotes=allQuotes.filter(q=>q.userId===me.id);
+
+  let html='<div class="pagehead"><h2>💬 Quotes D\'Day</h2></div>';
+
+  // Input form
+  html+='<div class="card glass">'+
+    '<h3>✍️ Share Your Thoughts</h3>'+
+    '<p class="hint" style="margin-bottom:10px">Share a thought, feeling, or inspiration. Max 300 words. No images or links.</p>'+
+    '<label class="field"><span>How are you feeling?</span></label>'+
+    '<div class="mood-chips" id="moodChips">'+
+    QUOTE_MOODS.map(m=>'<button class="mood-chip" data-mood="'+m.v+'" onclick="selectMood(\''+m.v+'\')">'+m.ic+' '+m.lb+'</button>').join('')+
+    '</div>'+
+    '<input type="hidden" id="selectedMood" value="neutral">'+
+    '<label class="field" style="margin-top:10px"><span>Your Quote (max 300 words)</span>'+
+    '<textarea id="quoteText" rows="4" maxlength="2000" placeholder="Write your thought, feeling, or inspiration here..." oninput="updateWordCount()"></textarea></label>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center">'+
+    '<small id="wordCount" style="opacity:.6">0 / 300 words</small>'+
+    '<button class="btn btn-primary" onclick="submitQuote()">📤 Send Quote</button>'+
+    '</div></div>';
+
+  // My quotes
+  if(myQuotes.length){
+    html+='<h3 class="consign-section-title">📝 My Quotes ('+myQuotes.length+')</h3>';
+    html+=myQuotes.map(q=>{
+      const m=moodInfo(q.mood);
+      return '<div class="card glass quote-card">'+
+        '<div class="quote-header">'+
+        '<span class="chip chip-info">'+m.ic+' '+m.lb+'</span>'+
+        '<small style="opacity:.55">'+relTime(q.createdAt)+'</small>'+
+        '<button class="btn btn-sm btn-danger" style="padding:2px 8px" onclick="delQuote(\''+q.id+'\')" title="Delete">🗑</button>'+
+        '</div>'+
+        '<p class="quote-text">'+esc(q.content)+'</p>'+
+        '</div>';
+    }).join('');
+  }
+
+  // Manager: see all quotes
+  if(isMgr&&allQuotes.length>myQuotes.length){
+    const otherQuotes=allQuotes.filter(q=>q.userId!==me.id);
+    html+='<h3 class="consign-section-title">👥 All Quotes ('+allQuotes.length+')</h3>';
+    html+=otherQuotes.map(q=>{
+      const author=DB.users.find(u=>u.id===q.userId);
+      const m=moodInfo(q.mood);
+      const avatar=author&&author.avatarUrl?
+        '<div class="avatar sm" style="display:inline-flex;vertical-align:middle;width:28px;height:28px;font-size:12px"><img src="'+esc(author.avatarUrl)+'" alt=""></div>':
+        '<div class="avatar sm" style="display:inline-flex;vertical-align:middle;width:28px;height:28px;font-size:12px">'+esc((author?author.name:'?').charAt(0).toUpperCase())+'</div>';
+      return '<div class="card glass quote-card">'+
+        '<div class="quote-header">'+
+        avatar+
+        '<span style="font-size:13px;font-weight:600">'+esc(author?author.name:'?')+'</span>'+
+        '<span class="chip chip-info" style="font-size:10px">'+m.ic+'</span>'+
+        '<small style="opacity:.55">'+relTime(q.createdAt)+'</small>'+
+        '<button class="btn btn-sm btn-danger" style="padding:2px 8px" onclick="delQuote(\''+q.id+'\')" title="Delete">🗑</button>'+
+        '</div>'+
+        '<p class="quote-text">'+esc(q.content)+'</p>'+
+        '</div>';
+    }).join('');
+  }
+
+  if(!allQuotes.length){
+    html+='<div class="empty-state glass"><div class="empty-ic">💬</div><h3>No Quotes Yet</h3><p>Be the first to share a thought!</p></div>';
+  }
+
+  $('#viewRoot').innerHTML=html;
+}
+
+// Mood selection
+function selectMood(mood){
+  $('#selectedMood').value=mood;
+  document.querySelectorAll('.mood-chip').forEach(c=>{
+    c.classList.toggle('selected',c.dataset.mood===mood);
+  });
+}
+
+// Word count
+function updateWordCount(){
+  const text=($('#quoteText')||{}).value||'';
+  const words=text.trim().split(/\s+/).filter(w=>w.length>0);
+  const count=words.length;
+  const el=$('#wordCount');
+  if(el){
+    el.textContent=count+' / 300 words';
+    el.style.color=count>300?'#ef5350':'';
+  }
+}
+
+// Submit quote
+async function submitQuote(){
+  const me=currentUser();if(!me)return;
+  const text=($('#quoteText')||{}).value||'';
+  const mood=$('#selectedMood').value||'neutral';
+  const words=text.trim().split(/\s+/).filter(w=>w.length>0);
+  if(!words.length)return toast('Quote cannot be empty','err');
+  if(words.length>300)return toast('Max 300 words ('+words.length+' words)','err');
+  if(text.match(/https?:\/\//))return toast('Links not allowed in quotes','err');
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  const {error}=await SB.rpc('submit_quote',{p_content:text.trim(),p_mood:mood});
+  if(btn)btn.disabled=false;
+  if(error)return toast(friendly(error),'err');
+  await sync();render();
+  toast('Quote shared! 📤','ok');
+}
+
+// Delete quote
+async function delQuote(id){
+  if(!confirm('Delete this quote?'))return;
+  const {error}=await SB.rpc('delete_quote',{p_quote_id:id});
+  if(error)return toast(friendly(error),'err');
+  await sync();render();
+  toast('Quote deleted 🗑','ok');
+}
+
+// ===== DASHBOARD: Quotes section (latest 10) =====
+function quotesDashboardHTML(){
+  const quotes=(DB.quotes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,10);
+  if(!quotes.length)return '';
+  let html='<div class="card glass quotes-dash">'+
+    '<h3 style="display:flex;align-items:center;gap:6px">💬 Quotes D\'Day</h3>'+
+    '<div class="quotes-list">';
+  quotes.forEach(q=>{
+    const author=DB.users.find(u=>u.id===q.userId);
+    const m=moodInfo(q.mood);
+    const avatar=author&&author.avatarUrl?
+      '<img src="'+esc(author.avatarUrl)+'" alt="">':
+      esc((author?author.name:'?').charAt(0).toUpperCase());
+    html+='<div class="quote-dash-item">'+
+      '<div class="avatar sm quote-avatar">'+avatar+'</div>'+
+      '<div class="quote-dash-content">'+
+      '<div class="quote-dash-text">'+esc(q.content)+'</div>'+
+      '<div class="quote-dash-meta">'+
+      '<span class="quote-dash-name">'+esc(author?author.name:'?')+'</span>'+
+      '<span class="chip" style="font-size:10px;padding:1px 6px">'+m.ic+'</span>'+
+      '<small style="opacity:.5">'+relTime(q.createdAt)+'</small>'+
+      '</div></div></div>';
+  });
+  html+='</div></div>';
+  return html;
+}
+
 
 /* ---------- 18. BOOT (dengan paparan ralat) ---------- */
 window.addEventListener('error',e=>showFatal(e.message));
