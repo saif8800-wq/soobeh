@@ -1361,7 +1361,8 @@ function render(){
     if(u.role==='staff'){ROUTE.view='staff';renderStaffShell();}
     else{ROUTE.view='manager';renderManagerShell();}
     setTimeout(checkEOTMPopup,800);
-    setTimeout(checkBirthdayPopup,2000);}
+    setTimeout(checkBirthdayPopup,2000);
+    setTimeout(checkOfferLetterPopup,3000);}
 }
 function goLogin(p){ROUTE=Object.assign(freshROUTE(),{view:'login',portal:p});pinBuf='';render();}
 function goBackLanding(){ROUTE.view='landing';render();}
@@ -1615,8 +1616,8 @@ function renderStaffSlips(){
 function renderStaffProfile(){
   const u=currentUser();
   $('#viewRoot').innerHTML='<div class="pagehead"><h2>👤 My Profile</h2>'+
-  '<div class="chips"><button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+u.id+'\')">✏️ Edit Profil Saya</button>'+
-  '<button class="btn btn-sm" onclick="openChangeMyUsername()">🆔 Tukar Username</button></div></div>'+
+  '<div class="chips"><button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+u.id+'\')">✏️ Edit Profil Saya</button>'+
+  '<button class="btn btn-sm" onclick="openChangeMyUsername()">🆔 Tukar Username</button></div></div>'+
   '<div class="card glass"><h3>📞 Hubungi Manager</h3>'+
   '<p class="hint" style="margin-bottom:12px">Ada soalan pasal syif, slip gaji, atau lain-lain? Hubungi manager terus melalui WhatsApp — nombor &amp; mesej pengenalan akan diisi automatik.</p>'+
   '<button class="btn btn-primary btn-big" onclick="contactManagerWA()">📱 WhatsApp Manager</button>'+
@@ -4415,6 +4416,29 @@ async function saveBirthdayTemplate(){
   toast('Birthday template saved!','ok');
 }
 
+
+// ===== OFFER LETTER POPUP: auto-show on login if pending =====
+function checkOfferLetterPopup(){
+  if(!ME||ME.role!=='staff')return;
+  const agr=offerLetterOf(ME.id);
+  if(!agr||agr.agreedAt)return; // no pending offer letter
+  showOfferLetterPopup(agr);
+}
+
+function showOfferLetterPopup(agr){
+  const staff=DB.users.find(u=>u.id===agr.staffId);
+  if(!staff)return;
+  const html='<div style="text-align:center;padding:20px">'+
+    '<div style="font-size:48px;margin-bottom:10px">📄</div>'+
+    '<h2 style="font-family:Poppins,sans-serif;font-size:20px;font-weight:700;margin:0 0 6px">Offer Letter Pending</h2>'+
+    '<p style="opacity:.75;font-size:14px;margin:6px 0 12px">You have an offer letter assigned on '+(agr.assignedAt?new Date(agr.assignedAt).toLocaleDateString('ms-MY'):'recently')+'. Please review and agree to the terms &amp; conditions.</p>'+
+    '<div class="notice warn" style="margin:10px 0">Please read the offer letter carefully and agree if you accept the terms. This action is permanent once confirmed.</div>'+
+    '<div class="chips" style="margin-top:14px">'+
+    '<button class="btn btn-primary btn-big" onclick="closeModal();openOfferLetterModal(\''+agr.id+'\')">📄 Read &amp; Agree Now</button>'+
+    '<button class="btn ghost" onclick="closeModal()">Later</button></div>'+
+    '</div>';
+  openModal('📄 Offer Letter Waiting',html);
+}
 
 /* ---------- 18. BOOT (dengan paparan ralat) ---------- */
 window.addEventListener('error',e=>showFatal(e.message));
