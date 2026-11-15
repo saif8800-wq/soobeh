@@ -513,7 +513,7 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
-const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
+const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,shiftStartHour:10,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
 function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null,quotes:[]}}
 let DB=emptyDB();
 
@@ -527,7 +527,7 @@ const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.
 const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
 const mapNotif=(r)=>({id:r.id,userId:r.user_id,msg:r.msg,read:r.read,t:Date.parse(r.created_at)});
 const mapAudit=(r)=>({t:Date.parse(r.at),by:r.by_username||'system',action:r.action,detail:r.detail||''});
-const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true,storeLat:r.store_lat!=null?+r.store_lat:null,storeLng:r.store_lng!=null?+r.store_lng:null,geofenceRadius:+r.geofence_radius||50}:Object.assign({},DEF_SET);
+const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,shiftStartHour:+r.shift_start_hour||10,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true,storeLat:r.store_lat!=null?+r.store_lat:null,storeLng:r.store_lng!=null?+r.store_lng:null,geofenceRadius:+r.geofence_radius||50}:Object.assign({},DEF_SET);
 
 async function loadAll(){
   if(!ME)return;
@@ -590,6 +590,11 @@ async function loadAll(){
     // Custom tasks (manager only)
     const ct=await SB.from('custom_tasks').select('*').order('created_at',{ascending:false}).limit(200);
     DB.customTasks=(ct.data||[]).map(mapCustomTask);
+  }
+  // Custom tasks — ALL users (staff need to see/mark/submit custom task assignments)
+  if(!DB.customTasks){
+    const ctA=await SB.from('custom_tasks').select('*').order('created_at',{ascending:false}).limit(200);
+    DB.customTasks=(ctA.data||[]).map(mapCustomTask);
   }
   // Offer letter (ALL users - staff fetch own via RLS)
   const olt=await SB.from('offer_letter_template').select('*').eq('id',1).maybeSingle();
@@ -808,7 +813,7 @@ function viewSlip(id){const u=currentUser();const p=DB.payslips.find(x=>x.id===i
   openModal('Slip Gaji — '+esc(p.staffName),slipBodyHTML(p)+'<button class="btn btn-primary btn-big" style="margin-top:12px" onclick="downloadSlip(\''+p.id+'\')">⬇ Muat Turun PDF</button>');}
 function payslipHTML(p){
   const S=DB.settings;
-  const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+(s.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
+  const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+shiftFullLabel(s.shift,s.hours).replace('☀ ','').replace('🌙 ','')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
   const line=(l,v)=>'<tr><td>'+l+'</td><td style="text-align:right">'+v+'</td></tr>';
 return '<div class="payslip"><div class="ps-head"><div><img src="logo.png" style="height:36px;width:auto" alt="SOOBÉH"><br><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
   '<div class="ps-grid"><div><b>Nama:</b> '+esc(p.staffName)+'</div><div><b>ID Pekerja:</b> '+esc(p.username)+'</div><div><b>Tempoh Kitaran:</b> '+fmtDateDS(p.start)+' – '+fmtDateDS(p.end)+'</div><div><b>Kitaran Bayaran:</b> '+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</div></div>'+
@@ -904,7 +909,7 @@ function openAssignModal(ds,shift){
   const cands=DB.users.filter(x=>x.role==='staff'&&x.active!==false&&!existing.includes(x.id));
   const past=ds<todayStr();
   let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div>'+
-  '<div class="detailrow"><span>Syif</span><b>'+(shift==='morning'?'☀ Pagi · 10:00–16:00':'🌙 Petang · 16:00–22:00')+'</b></div>'+
+  '<div class="detailrow"><span>Syif</span><b>'+shiftFullLabel(shift)+'</b></div>'+
   '<div class="detailrow"><span>Ditugaskan</span><b>'+existing.length+' / maks '+DB.settings.maxPerShift+'</b></div>';
   if(past)body+='<div class="notice warn">🚨 Tarikh LAMPAU — tugasan ini untuk <b>rekod kecemasan</b> (staff tak hadir, cari ganti segera dsb.). Ia memberi kesan kepada pengiraan gaji staff ini secara <b>retrospektif</b> (jam × kadar ikut jualan syif berkenaan).</div>';
   if(!cands.length)body+='<div class="notice">Tiada staff lain yang boleh ditugaskan untuk slot ini.</div>';
@@ -935,9 +940,12 @@ async function mgrRemoveAssign(eid){
 function hrsOf(e){const S=DB.settings;const st=DB.users.find(u=>u.id===((e&&e.staffId)||ME.id))||{};return (e&&e.hours!=null)?e.hours:(st.defaultHours!=null?st.defaultHours:S.shiftHours)}
 function shiftInfoCardHTML(){
   const S=DB.settings;
-  return '<div class="card glass"><h3>⏰ Masa Syif (Tetap)</h3>'+
-  '<div class="detailrow"><span>☀ Syif Pagi</span><b>10:00 pagi – 4:00 petang</b></div>'+
-  '<div class="detailrow"><span>🌙 Syif Petang</span><b>4:00 petang – 10:00 malam</b></div>'+
+  const mornStr=shiftTimeLabel('morning');
+  const eveStr=shiftTimeLabel('evening');
+  return '<div class="card glass"><h3>⏰ Masa Syif</h3>'+
+  '<div class="detailrow"><span>☀ Syif Pagi</span><b>'+mornStr+' ('+S.shiftHours+' jam)</b></div>'+
+  '<div class="detailrow"><span>🌙 Syif Petang</span><b>'+eveStr+' ('+S.shiftHours+' jam)</b></div>'+
+  '<div class="detailrow"><span>Mula syif pagi</span><b>'+(S.shiftStartHour||10)+':00 — boleh diubah manager (event buka awal)</b></div>'+
   '<div class="detailrow"><span>Jam default</span><b>'+S.shiftHours+' jam/syif — boleh dijaraskan oleh manager (cth: latihan 4 jam)</b></div></div>';
 }
 function upcomingShiftsHTML(){
@@ -954,7 +962,7 @@ function upcomingShiftsHTML(){
     const badge=days===0?'<span class="chip chip-warn">⚡ HARI INI</span>':days===1?'<span class="chip chip-wait">ESOK</span>':'<span class="chip chip-info">dalam '+days+' hari</span>';
     const h=hrsOf(e);
     return '<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px">'+
-    '<span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span>'+
+    '<span class="chip chip-info">'+shiftFullLabel(e.shift,e.hours)+'</span>'+
     '<span class="chip chip-ok">⏱ '+h+' jam</span>'+badge+'</div></div>'+
     '<b class="amt">≈'+rm2(h*S.baseRate)+'</b></div>';
   }).join('')+'<p class="hint">Anggaran ikut kadar asas — kadar sebenar ikut jualan syif (RM'+S.highRate+'/jam jika melebihi sasaran).</p></div>';
@@ -967,7 +975,7 @@ function openHoursModal(eid){
   const cur=e.hours!=null?e.hours:hrsOf(e);
   let body='<div class="notice info">Tetapkan jam bekerja untuk <b>syif ini sahaja</b> — cth: staff latihan 4 jam. Gaji dikira jam sebenar × kadar syif.</div>'+
   '<div class="detailrow"><span>Staff</span><b>'+esc(st.name||'?')+'</b></div>'+
-  '<div class="detailrow"><span>Syif</span><b>'+fmtDateDS(e.date)+' · '+(e.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</b></div>'+
+  '<div class="detailrow"><span>Syif</span><b>'+fmtDateDS(e.date)+' · '+shiftFullLabel(e.shift,e.hours)+'</b></div>'+
   '<div class="detailrow"><span>Jam semasa</span><b>'+cur+' jam '+(e.hours!=null?'(custom)':'(default)')+'</b></div>'+
   '<h3 style="margin-top:12px">Set kepada:</h3><div class="chips" style="margin:10px 0">'+
   [2,3,4,5,6,7,8].map(h=>'<button class="btn btn-sm '+(cur===h?'btn-primary':'')+'" onclick="setEntryHours(\''+eid+'\','+h+')">'+h+' jam</button>').join('')+'</div>'+
@@ -1147,7 +1155,7 @@ function openSwapModal(preId){
   if(!mine.length)return toast('Tiada syif anda pada masa hadapan untuk ditukar','err');
   const peers=DB.users.filter(x=>x.role==='staff'&&x.active!==false&&x.id!==ME.id);
   openModal('Mohon Pertukaran Syif',
-   '<label class="field"><span>1. Pilih syif anda</span><select id="swEntry">'+mine.map(e=>'<option value="'+e.id+'"'+(preId===e.id?' selected':'')+'>'+fmtDateDS(e.date)+' — '+(e.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</option>').join('')+'</select></label>'+
+   '<label class="field"><span>1. Pilih syif anda</span><select id="swEntry">'+mine.map(e=>'<option value="'+e.id+'"'+(preId===e.id?' selected':'')+'>'+fmtDateDS(e.date)+' — '+shiftFullLabel(e.shift).replace('☀ ','').replace('🌙 ','')+'</option>').join('')+'</select></label>'+
    '<label class="field"><span>2. Pilih rakan sekerja</span><select id="swPeer" onchange="swapPeerChanged()">'+peers.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select></label>'+
    '<label class="field"><span>3. Tukar dua hala? (opsyenal — pilih syif rakan)</span><select id="swEx"></select></label>'+
    '<label class="field"><span>Sebab (untuk rujukan manager)</span><textarea id="swReason" rows="3" placeholder="Contoh: balik kampung, temujanji klinik..."></textarea></label>'+
@@ -1352,10 +1360,10 @@ async function submitResetPin(id){
 async function saveSettings(){
   const me=currentUser();if(!me||me.role!=='admin')return toast('Akses admin sahaja','err');
   const g=id=>parseFloat($('#'+id).value);
-  const s={baseRate:g('stBase'),highRate:g('stHigh'),weekdayThreshold:g('stWk'),weekendThreshold:g('stWknd'),monthlySalesThreshold:g('stMon'),perfBonus:g('stPerf'),attBonus:g('stAtt'),typhoidAllowance:g('stTyph'),typhoidMax:Math.round(g('stTyphMax')),maxPerShift:Math.max(1,Math.round(g('stMax'))),shiftHours:g('stHrs'),allowStaffSales:$('#stStaffSales').checked};
-  if([s.baseRate,s.highRate,s.weekdayThreshold,s.weekendThreshold,s.monthlySalesThreshold,s.perfBonus,s.attBonus,s.typhoidAllowance,s.typhoidMax,s.shiftHours].some(v=>isNaN(v)||v<0)||s.baseRate<=0||s.shiftHours<=0)
+  const s={baseRate:g('stBase'),highRate:g('stHigh'),weekdayThreshold:g('stWk'),weekendThreshold:g('stWknd'),monthlySalesThreshold:g('stMon'),perfBonus:g('stPerf'),attBonus:g('stAtt'),typhoidAllowance:g('stTyph'),typhoidMax:Math.round(g('stTyphMax')),maxPerShift:Math.max(1,Math.round(g('stMax'))),shiftHours:g('stHrs'),shiftStartHour:Math.max(0,Math.min(23,Math.round(g('stStartHr')||10))),allowStaffSales:$('#stStaffSales').checked};
+  if([s.baseRate,s.highRate,s.weekdayThreshold,s.weekendThreshold,s.monthlySalesThreshold,s.perfBonus,s.attBonus,s.typhoidAllowance,s.typhoidMax,s.shiftHours,s.shiftStartHour].some(v=>isNaN(v)||v<0)||s.baseRate<=0||s.shiftHours<=0)
     return toast('Nilai tetapan tidak sah','err');
-  const {error}=await SB.from('settings').update({base_rate:s.baseRate,high_rate:s.highRate,weekday_threshold:s.weekdayThreshold,weekend_threshold:s.weekendThreshold,monthly_sales_threshold:s.monthlySalesThreshold,perf_bonus:s.perfBonus,att_bonus:s.attBonus,typhoid_allowance:s.typhoidAllowance,typhoid_max:s.typhoidMax,max_per_shift:s.maxPerShift,shift_hours:s.shiftHours,allow_staff_sales:s.allowStaffSales,updated_at:new Date().toISOString()}).eq('id',1);
+  const {error}=await SB.from('settings').update({base_rate:s.baseRate,high_rate:s.highRate,weekday_threshold:s.weekdayThreshold,weekend_threshold:s.weekendThreshold,monthly_sales_threshold:s.monthlySalesThreshold,perf_bonus:s.perfBonus,att_bonus:s.attBonus,typhoid_allowance:s.typhoidAllowance,typhoid_max:s.typhoidMax,max_per_shift:s.maxPerShift,shift_hours:s.shiftHours,shift_start_hour:s.shiftStartHour,allow_staff_sales:s.allowStaffSales,updated_at:new Date().toISOString()}).eq('id',1);
   if(error)return toast(friendly(error),'err');
   await logAudit('settings_update','kadar/bonus dikemaskini');
   await sync();render();toast('Tetapan disimpan ✔','ok');}
@@ -1527,7 +1535,7 @@ function renderStaffCalendar(){
 function bookingChip(st){return st==='approved'?'<span class="chip chip-ok">Disahkan</span>':st==='pending'?'<span class="chip chip-wait">Menunggu Kelulusan</span>':'<span class="chip chip-no">Tidak Dipilih</span>'}
 function openSlot(ds,shift){
   const u=currentUser(),pk=periodOf(ds),pub=periodPublished(pk),past=ds<todayStr(),winEnd=bookingWindowEnd();
-  const shName=shift==='morning'?'Syif Pagi · 10:00–16:00':'Syif Petang · 16:00–22:00';
+  const shName=(shift==='morning'?'Syif Pagi · ':'Syif Petang · ')+shiftTimeLabel(shift);
   let body='<div class="detailrow"><span>Tarikh</span><b>'+fmtDateDS(ds)+'</b></div><div class="detailrow"><span>Syif</span><b>'+shName+'</b></div><div class="detailrow"><span>Tempoh</span><b>'+periodLabel(pk)+'</b></div>';
   if(pub){
     const es=DB.schedule.filter(e=>e.date===ds&&e.shift===shift),mine=es.find(e=>e.staffId===u.id);
@@ -1577,7 +1585,7 @@ function renderStaffJadual(){
       const days=Math.round((new Date(e.date+'T00:00:00')-new Date(todayStr()+'T00:00:00'))/864e5);
       const badge=days===0?'<span class="chip chip-warn">⚡ HARI INI</span>':days===1?'<span class="chip chip-wait">ESOK</span>':'';
       html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px">'+
-      '<span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span>'+
+      '<span class="chip chip-info">'+shiftFullLabel(e.shift,e.hours)+'</span>'+
       '<span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
       (pub?'<span class="chip chip-ok">Jadual Rasmi</span>':'<span class="chip chip-ok">Disahkan</span>')+badge+'</div></div></div>';
     });
@@ -1586,7 +1594,7 @@ function renderStaffJadual(){
   /* 2) Menunggu kelulusan manager (pending sahaja) */
   if(pending.length){
     html+='<div class="card glass"><h3>⏳ Menunggu Kelulusan Manager ('+pending.length+')</h3>'+
-    pending.map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+(b.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)')+'</div>'+bookingChip('pending')+'</div>').join('')+
+    pending.map(b=>'<div class="brow"><div><b>'+fmtDateDS(b.date)+'</b> · '+shiftFullLabel(b.shift)+'</div>'+bookingChip('pending')+'</div>').join('')+
     '<p class="hint">Manager akan mengesahkan &amp; mengeluarkan jadual rasmi. Tempahan yang tidak dipilih tidak akan dipaparkan di sini.</p></div>';
   }
   /* 3) Lampau bulan semasa — dilipat supaya senarai kekal pendek */
@@ -1594,7 +1602,7 @@ function renderStaffJadual(){
     html+='<details class="shiftdet card glass" style="padding:14px 18px"><summary>📜 Syif Lampau Bulan Ini ('+past.length+') — tekan untuk buka</summary>';
     past.forEach(e=>{
       const sale=getSale(e.date,e.shift),rate=sale!=null?shiftRate(e.date,e.shift,sale):null;
-      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+(e.shift==='morning'?'☀ Pagi 10:00–16:00':'🌙 Petang 16:00–22:00')+'</span><span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
+      html+='<div class="brow"><div><b>'+fmtDateDS(e.date)+'</b><div class="chips" style="margin-top:4px"><span class="chip chip-info">'+shiftFullLabel(e.shift,e.hours)+'</span><span class="chip">⏱ '+hrsOf(e)+' jam</span>'+
       (e.noShow?'<span class="chip chip-no">Tidak Hadir</span>':'')+
       (sale!=null?'<span class="chip'+(rate>S.baseRate?' chip-ok':'')+'">Jualan '+rm2(sale)+' · RM'+rate.toFixed(0)+'/jam</span>':'<span class="chip chip-wait">Jualan belum dimasukkan</span>')+'</div></div>'+
       (!e.noShow&&sale!=null?'<b class="amt">'+rm2(hrsOf(e)*rate)+'</b>':'')+'</div>';
@@ -1638,8 +1646,10 @@ function renderStaffSlips(){
 function renderStaffProfile(){
   const u=currentUser();
   $('#viewRoot').innerHTML='<div class="pagehead"><h2>👤 My Profile</h2>'+
-  '<div class="chips"><button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+u.id+'\')">✏️ Edit Profil Saya</button>'+
-  '<button class="btn btn-sm" onclick="openChangeMyUsername()">🆔 Tukar Username</button></div></div>'+
+  '<div class="chips"><button class="btn btn-sm btn-primary" onclick="openEditProfile(\''+u.id+'\')">✏️ Edit Profil Saya</button>'+
+
+  '<button class="btn btn-sm" onclick="openChangeMyUsername()">🆔 Tukar Username</button></div></div>'+
+
   '<div class="card glass"><h3>📞 Hubungi Manager</h3>'+
   '<p class="hint" style="margin-bottom:12px">Ada soalan pasal syif, slip gaji, atau lain-lain? Hubungi manager terus melalui WhatsApp — nombor &amp; mesej pengenalan akan diisi automatik.</p>'+
   '<button class="btn btn-primary btn-big" onclick="contactManagerWA()">📱 WhatsApp Manager</button>'+
@@ -1811,6 +1821,28 @@ function myShiftsOn(ds){
   return [...s];
 }
 function ltNav(d){ROUTE.ltmk=shiftMonth(ROUTE.ltmk||monthKey(todayStr()),d);render()}
+// Helper: paparkan waktu syif ikut shiftStartHour (pagi) + shiftHours
+// Pagi mula = shiftStartHour dari setting (10 default, boleh 8/9 untuk event)
+// Petang mula = mula pagi + shiftHours (auto-ikut)
+function shiftTimeLabel(shift, hours){
+  const S=DB.settings;
+  const h=(hours!=null)?hours:(S.shiftHours||6);
+  const mornStart=S.shiftStartHour!=null?S.shiftStartHour:10;
+  // Pagi: start = mornStart, end = mornStart + h
+  // Petang: start = mornStart + shiftHours (default), end = start + h
+  const startH=shift==='morning'?mornStart:(mornStart+(S.shiftHours||6));
+  const pad=n=>String(n).padStart(2,'0');
+  const totalMinH=Math.floor(startH)+Math.floor(h);
+  const eh=Math.floor(totalMinH)%24;
+  const em=Math.round((h-Math.floor(h))*60);
+  const smMin=Math.round((startH-Math.floor(startH))*60);
+  return pad(Math.floor(startH))+':'+pad(smMin)+'\u2013'+pad(eh)+':'+pad(em);
+}
+function shiftFullLabel(shift, hours){
+  const ic=shift==='morning'?'\u2600 Pagi':'\U0001f319 Petang';
+  return ic+' ('+shiftTimeLabel(shift,hours)+')';
+}
+
 /* --- VIEW STAF --- */
 function renderStaffTasks(){
   const u=currentUser();
@@ -1829,7 +1861,7 @@ function renderStaffTasks(){
     html+='<div class="card glass"><div class="brow" style="border:0"><div><b>'+tp.ic+' '+esc(tp.t)+'</b><div class="chips" style="margin-top:5px"><span class="chip chip-info">'+(x.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span><span class="chip '+st[1]+'">'+st[0]+'</span></div></div></div>'+
     (x.note?'<div class="detailrow"><span>Arahan manager</span><b>'+esc(x.note)+'</b></div>':'')+act+'</div>';
   });
-  if(today.some(x=>x.status==='assigned'))html+='<div class="notice warn">⚡ Selesaikan tugasan <b>SEBELUM syif tamat</b> (Pagi: 4:00 petang · Petang: 10:00 malam) — hantar lewat akan ditanda LEWAT.</div>';
+  if(today.some(x=>x.status==='assigned'))html+='<div class="notice warn">⚡ Selesaikan tugasan <b>SEBELUM syif tamat</b> (Pagi: '+shiftTimeLabel('morning').split('–')[1].trim()+' · Petang: '+shiftTimeLabel('evening').split('–')[1].trim()+') — hantar lewat akan ditanda LEWAT.</div>';
   html+=taskReportHTML(u.id);
   $('#viewRoot').innerHTML=html;
 }
@@ -1837,7 +1869,7 @@ function openTaskModal(id){
   const x=DB.tasks.find(t=>t.id===id);if(!x)return;
   const tp=tplOf(x.template)||{ic:'📋',t:x.template,items:[]};
   const st=TASK_ST[x.status];
-  let body='<div class="detailrow"><span>Tarikh &amp; syif</span><b>'+dShort(x.date)+' · '+(x.shift==='morning'?'Pagi (10:00–16:00)':'Petang (16:00–22:00)')+'</b></div>'+
+  let body='<div class="detailrow"><span>Tarikh &amp; syif</span><b>'+dShort(x.date)+' · '+shiftFullLabel(x.shift).replace('☀ ','').replace('🌙 ','')+'</b></div>'+
   '<div class="detailrow"><span>Status</span><b><span class="chip '+st[1]+'">'+st[0]+'</span></b></div>'+
   (x.note?'<div class="detailrow"><span>Arahan manager</span><b>'+esc(x.note)+'</b></div>':'');
   const d=(x.data&&x.data.items)||null;
@@ -2295,7 +2327,7 @@ function renderMBookings(){
         const sl=byDate[ds].filter(x=>x.shift===sh).sort((a,c)=>order[a.status]-order[c.status]);
         if(!sl.length)return;
         const apN=sl.filter(x=>x.status==='approved').length;
-        rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ Syif Pagi (10:00–16:00)':'🌙 Syif Petang (16:00–22:00)')+' <span class="chip '+(apN>=DB.settings.maxPerShift?'chip-warn':'chip-info')+'">'+apN+'/'+DB.settings.maxPerShift+' disahkan</span></div>';
+        rows+='<div class="shiftblock"><div class="shifttitle">'+(sh==='morning'?'☀ ':'🌙 ')+(sh==='morning'?'Syif Pagi':'Syif Petang')+' ('+shiftTimeLabel(sh)+')'+' <span class="chip '+(apN>=DB.settings.maxPerShift?'chip-warn':'chip-info')+'">'+apN+'/'+DB.settings.maxPerShift+' disahkan</span></div>';
         sl.forEach(x=>{
           const st=DB.users.find(y=>y.id===x.staffId);
           rows+='<div class="brow"><b>'+esc(st?st.name:'?')+'</b><div class="brow-act">'+bookingChip(x.status)+
@@ -2532,7 +2564,7 @@ function renderMSettings(){
   f('stMon','Sasaran jualan bulanan untuk bonus (RM)',S.monthlySalesThreshold)+
   f('stPerf','Bonus prestasi jualan (RM)',S.perfBonus)+f('stAtt','Bonus kehadiran (RM)',S.attBonus)+
   f('stTyph','Elaun typhoid / kitaran (RM)',S.typhoidAllowance)+f('stTyphMax','Elaun typhoid — maksimum bayaran (kali)',S.typhoidMax,'1')+
-  f('stMax','Maksimum staff setiap syif',S.maxPerShift,'1')+f('stHrs','Jam setiap syif',S.shiftHours,'0.5')+'</div>'+
+  f('stMax','Maksimum staff setiap syif',S.maxPerShift,'1')+f('stHrs','Jam setiap syif',S.shiftHours,'0.5')+f('stStartHr','Waktu mula syif pagi (jam 24 — 8=8pagi, 9=9pagi, 10=10pagi)',(S.shiftStartHour!=null?S.shiftStartHour:10),'1')+'</div>'+
   '<label class="chk"><input type="checkbox" id="stStaffSales"'+(S.allowStaffSales?' checked':'')+'> Benarkan staff input jualan sendiri (PRD 5.5)</label>'+
   '<button class="btn btn-primary btn-big" onclick="saveSettings()">💾 Simpan Tetapan</button>'+
   '<p class="hint">Semua kadar &amp; syarat bonus boleh dikonfigur tanpa ubah kod. Berkuat kuasa serta-merta untuk slip yang dijana selepas ini.</p></div>'+
@@ -3682,7 +3714,7 @@ function openAttendanceEditModal(attId){
   };
   const pinVal=toDTLocal(a.punchIn);
   const poutVal=toDTLocal(a.punchOut);
-  const shiftLabel=a.shift==='morning'?'☀ Pagi (10:00–16:00)':'🌙 Petang (16:00–22:00)';
+  const shiftLabel=shiftFullLabel(a.shift);
   let html='<div class="detailrow"><span>Staf</span><b>'+esc(staff.name)+'</b></div>'+
     '<div class="detailrow"><span>Tarikh &amp; Syif</span><b>'+dShort(a.date)+' · '+shiftLabel+'</b></div>'+
     (a.dist!=null?'<div class="detailrow"><span>Jarak punch</span><b>'+a.dist+'m dari kedai</b></div>':'')+
