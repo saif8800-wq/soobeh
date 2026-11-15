@@ -191,6 +191,8 @@ details.demo .inner{padding:0 16px 14px}
 .cal-dow{text-align:center;font-weight:700;opacity:.55;font-size:11.5px;padding:3px 0;text-transform:uppercase;letter-spacing:.04em}
 .cal-cell{min-height:80px;border-radius:11px;background:rgba(255,255,255,.04);padding:5px;display:flex;flex-direction:column;gap:3px}
 .cal-cell.blank{background:transparent}
+.cal-cell.holiday{background:linear-gradient(135deg,rgba(229,115,115,.18),rgba(239,68,68,.12));border:1px solid rgba(229,115,115,.4)}
+.cal-holiday-badge{font-size:9px;font-weight:700;color:#fff;background:linear-gradient(135deg,#f43f5e,#e11d48);padding:1px 4px;border-radius:4px;margin:1px 0;line-height:1.2;display:inline-block;align-self:flex-start}
 .cal-cell.past{opacity:.45}
 .cal-cell.locked{opacity:.3}
 .cal-day{font-size:12px;font-weight:800;text-align:center;opacity:.8}
@@ -513,8 +515,8 @@ function bookingWindowEnd(){return periodBounds(nextPeriod(curPeriod()))[1]}
 
 /* ---------- 2. SAMBUNGAN SUPABASE ---------- */
 let SB=null, ME=null;
-const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,shiftStartHour:10,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50};
-function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null,quotes:[]}}
+const DEF_SET={baseRate:8,highRate:9,weekdayThreshold:300,weekendThreshold:400,monthlySalesThreshold:3000,perfBonus:100,attBonus:30,typhoidAllowance:10,typhoidMax:5,maxPerShift:2,shiftHours:6,shiftStartHour:10,allowStaffSales:false,typhoidEnabled:true,attBonusEnabled:false,storeLat:null,storeLng:null,geofenceRadius:50,holidayEnabled:false,holidayRate:10,holidayThreshold:400};
+function emptyDB(){return {users:[],bookings:[],schedule:[],swaps:[],sales:[],payslips:[],notifications:[],audit:[],deductions:[],attendance:[],tasks:[],expenses:[],fixedCosts:[],published:{},settings:Object.assign({},DEF_SET),slotMonths:{},consignors:[],consignProducts:[],consignReceipts:[],consignReceiptItems:[],consignPayments:[],customTasks:[],offerLetterTemplate:null,offerLetterAgreements:[],eotmAnnouncements:[],eotmViewed:[],birthdayTemplate:null,quotes:[],publicHolidays:[]}}
 let DB=emptyDB();
 
 /* ---------- 3. PENGURUSAN DATA ---------- */
@@ -527,7 +529,7 @@ const mapSale=(r)=>({date:r.date,shift:r.shift,amount:+r.amount,by:usernameOf(r.
 const mapPayslip=(r)=>Object.assign({id:r.id,staffId:r.staff_id,monthKey:r.start.slice(0,7)},r.payload||{});
 const mapNotif=(r)=>({id:r.id,userId:r.user_id,msg:r.msg,read:r.read,t:Date.parse(r.created_at)});
 const mapAudit=(r)=>({t:Date.parse(r.at),by:r.by_username||'system',action:r.action,detail:r.detail||''});
-const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,shiftStartHour:+r.shift_start_hour||10,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true,storeLat:r.store_lat!=null?+r.store_lat:null,storeLng:r.store_lng!=null?+r.store_lng:null,geofenceRadius:+r.geofence_radius||50}:Object.assign({},DEF_SET);
+const mapSettings=(r)=>r?{baseRate:+r.base_rate,highRate:+r.high_rate,weekdayThreshold:+r.weekday_threshold,weekendThreshold:+r.weekend_threshold,monthlySalesThreshold:+r.monthly_sales_threshold,perfBonus:+r.perf_bonus,attBonus:+r.att_bonus,typhoidAllowance:+r.typhoid_allowance,typhoidMax:+r.typhoid_max,maxPerShift:+r.max_per_shift,shiftHours:+r.shift_hours,shiftStartHour:+r.shift_start_hour||10,allowStaffSales:!!r.allow_staff_sales,typhoidEnabled:r.typhoid_enabled!==false,attBonusEnabled:r.att_bonus_enabled===true,storeLat:r.store_lat!=null?+r.store_lat:null,storeLng:r.store_lng!=null?+r.store_lng:null,geofenceRadius:+r.geofence_radius||50,holidayEnabled:!!r.holiday_enabled,holidayRate:+r.holiday_rate||10,holidayThreshold:+r.holiday_threshold||400}:Object.assign({},DEF_SET);
 
 async function loadAll(){
   if(!ME)return;
@@ -612,6 +614,9 @@ async function loadAll(){
   // Quotes (ALL users)
   const qq=await SB.from('quotes').select('*').order('created_at',{ascending:false}).limit(10);
   DB.quotes=(qq.data||[]).map(mapQuote);
+  // Public holidays (ALL users — staff calendar perlu tahu cuti)
+  const ph=await SB.from('public_holidays').select('*').order('holiday_date');
+  DB.publicHolidays=(ph.data||[]).map(mapHoliday);
 }
 async function sync(){await loadAll()}
 async function syncNow(){if(!ME)return;DB.slotMonths={};await sync();render();toast('Data dikemaskini 🔄','ok')}
@@ -657,7 +662,17 @@ async function openNotifs(){
 
 /* ---------- 5. LOGIK PERNIAGAAN (PRD Seksyen 6 — dinilai SETIAP SYIF) ---------- */
 function getSale(date,shift){const s=DB.sales.find(x=>x.date===date&&x.shift===shift);return s?s.amount:null}
-function shiftRate(ds,shift,sale){const S=DB.settings;const th=isWeekend(ds)?S.weekendThreshold:S.weekdayThreshold;return (sale!=null&&sale>th)?S.highRate:S.baseRate}
+function shiftRate(ds,shift,sale){
+  const S=DB.settings;
+  // PRIORITY 1: Public holiday (if enabled & date is holiday)
+  if(S.holidayEnabled&&isHoliday(ds)){
+    if(sale!=null&&sale>=S.holidayThreshold)return S.holidayRate;
+    return S.baseRate; // hari cuti tapi sales tak cukup threshold
+  }
+  // PRIORITY 2: Weekend / weekday
+  const th=isWeekend(ds)?S.weekendThreshold:S.weekdayThreshold;
+  return (sale!=null&&sale>th)?S.highRate:S.baseRate;
+}
 function periodPublished(pk){return !!DB.published[pk]}
 function scheduledEntries(staffId,mk){ /* gabung: jadual (termasuk ASSIGN manager) + tempahan disahkan */
   let out=[];
@@ -813,7 +828,7 @@ function viewSlip(id){const u=currentUser();const p=DB.payslips.find(x=>x.id===i
   openModal('Slip Gaji — '+esc(p.staffName),slipBodyHTML(p)+'<button class="btn btn-primary btn-big" style="margin-top:12px" onclick="downloadSlip(\''+p.id+'\')">⬇ Muat Turun PDF</button>');}
 function payslipHTML(p){
   const S=DB.settings;
-  const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+'</td><td>'+shiftFullLabel(s.shift,s.hours).replace('☀ ','').replace('🌙 ','')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
+  const rows=(p.shifts||[]).map(s=>'<tr><td>'+fmtDateDS(s.date)+' '+(DB.settings.holidayEnabled&&isHoliday(s.date)?'<span class="chip" title="'+esc(holidayName(s.date))+'" style="background:#e11d48;color:#fff">🎉</span>':'')+'</td><td>'+shiftFullLabel(s.shift,s.hours).replace('☀ ','').replace('🌙 ','')+'</td><td style="text-align:center">'+s.hours+'</td><td style="text-align:right">'+(s.sale==null?'—':'RM '+s.sale.toFixed(2))+'</td><td style="text-align:center">RM '+s.rate.toFixed(2)+(DB.settings.holidayEnabled&&isHoliday(s.date)&&s.sale!=null&&s.sale>=DB.settings.holidayThreshold?' <small style="color:#e11d48">🎉cuti</small>':'')+'</td><td style="text-align:right">RM '+s.amount.toFixed(2)+'</td></tr>').join('');
   const line=(l,v)=>'<tr><td>'+l+'</td><td style="text-align:right">'+v+'</td></tr>';
 return '<div class="payslip"><div class="ps-head"><div><img src="logo.png" style="height:36px;width:auto" alt="SOOBÉH"><br><small>Sistem Jadual Syif & Gaji</small></div><div style="text-align:right"><b style="font-size:18px">SLIP GAJI</b><br><small>No: SOB-'+String(p.id).slice(0,8).toUpperCase()+'</small><br><small>Dijana: '+new Date(p.t).toLocaleString('ms-MY')+'</small></div></div>'+
   '<div class="ps-grid"><div><b>Nama:</b> '+esc(p.staffName)+'</div><div><b>ID Pekerja:</b> '+esc(p.username)+'</div><div><b>Tempoh Kitaran:</b> '+fmtDateDS(p.start)+' – '+fmtDateDS(p.end)+'</div><div><b>Kitaran Bayaran:</b> '+(p.cycle==='monthly'?'Bulanan':'Setiap 2 Minggu')+'</div></div>'+
@@ -1360,10 +1375,10 @@ async function submitResetPin(id){
 async function saveSettings(){
   const me=currentUser();if(!me||me.role!=='admin')return toast('Akses admin sahaja','err');
   const g=id=>parseFloat($('#'+id).value);
-  const s={baseRate:g('stBase'),highRate:g('stHigh'),weekdayThreshold:g('stWk'),weekendThreshold:g('stWknd'),monthlySalesThreshold:g('stMon'),perfBonus:g('stPerf'),attBonus:g('stAtt'),typhoidAllowance:g('stTyph'),typhoidMax:Math.round(g('stTyphMax')),maxPerShift:Math.max(1,Math.round(g('stMax'))),shiftHours:g('stHrs'),shiftStartHour:Math.max(0,Math.min(23,Math.round(g('stStartHr')||10))),allowStaffSales:$('#stStaffSales').checked};
-  if([s.baseRate,s.highRate,s.weekdayThreshold,s.weekendThreshold,s.monthlySalesThreshold,s.perfBonus,s.attBonus,s.typhoidAllowance,s.typhoidMax,s.shiftHours,s.shiftStartHour].some(v=>isNaN(v)||v<0)||s.baseRate<=0||s.shiftHours<=0)
+  const s={baseRate:g('stBase'),highRate:g('stHigh'),weekdayThreshold:g('stWk'),weekendThreshold:g('stWknd'),monthlySalesThreshold:g('stMon'),perfBonus:g('stPerf'),attBonus:g('stAtt'),typhoidAllowance:g('stTyph'),typhoidMax:Math.round(g('stTyphMax')),maxPerShift:Math.max(1,Math.round(g('stMax'))),shiftHours:g('stHrs'),shiftStartHour:Math.max(0,Math.min(23,Math.round(g('stStartHr')||10))),allowStaffSales:$('#stStaffSales').checked,holidayEnabled:$('#stHolidayEn').checked,holidayRate:Math.max(0,g('stHolidayRate')||10),holidayThreshold:Math.max(0,g('stHolidayThr')||400)};
+  if([s.baseRate,s.highRate,s.weekdayThreshold,s.weekendThreshold,s.monthlySalesThreshold,s.perfBonus,s.attBonus,s.typhoidAllowance,s.typhoidMax,s.shiftHours,s.shiftStartHour,s.holidayRate,s.holidayThreshold].some(v=>isNaN(v)||v<0)||s.baseRate<=0||s.shiftHours<=0)
     return toast('Nilai tetapan tidak sah','err');
-  const {error}=await SB.from('settings').update({base_rate:s.baseRate,high_rate:s.highRate,weekday_threshold:s.weekdayThreshold,weekend_threshold:s.weekendThreshold,monthly_sales_threshold:s.monthlySalesThreshold,perf_bonus:s.perfBonus,att_bonus:s.attBonus,typhoid_allowance:s.typhoidAllowance,typhoid_max:s.typhoidMax,max_per_shift:s.maxPerShift,shift_hours:s.shiftHours,shift_start_hour:s.shiftStartHour,allow_staff_sales:s.allowStaffSales,updated_at:new Date().toISOString()}).eq('id',1);
+  const {error}=await SB.from('settings').update({base_rate:s.baseRate,high_rate:s.highRate,weekday_threshold:s.weekdayThreshold,weekend_threshold:s.weekendThreshold,monthly_sales_threshold:s.monthlySalesThreshold,perf_bonus:s.perfBonus,att_bonus:s.attBonus,typhoid_allowance:s.typhoidAllowance,typhoid_max:s.typhoidMax,max_per_shift:s.maxPerShift,shift_hours:s.shiftHours,shift_start_hour:s.shiftStartHour,allow_staff_sales:s.allowStaffSales,holiday_enabled:s.holidayEnabled,holiday_rate:s.holidayRate,holiday_threshold:s.holidayThreshold,updated_at:new Date().toISOString()}).eq('id',1);
   if(error)return toast(friendly(error),'err');
   await logAudit('settings_update','kadar/bonus dikemaskini');
   await sync();render();toast('Tetapan disimpan ✔','ok');}
@@ -1515,7 +1530,9 @@ function renderStaffCalendar(){
   const mk=pk.slice(0,7),d1=pk.endsWith('A')?1:16,d2=+b[1].slice(8,10);
   for(let d=d1;d<=d2;d++){const ds=mk+'-'+pad2(d);
     const past=ds<todayStr(),locked=!pub&&ds>winEnd;
-    cells+='<div class="cal-cell'+(past?' past':'')+(locked?' locked':'')+'"><div class="cal-day">'+d+(ds===todayStr()?' •':'')+'</div>'+slotPill(ds,'morning',pub,locked)+slotPill(ds,'evening',pub,locked)+'</div>';}
+    const hInfo=(DB.settings&&DB.settings.holidayEnabled&&isHoliday(ds))?holidayName(ds):'';
+    const hClass=hInfo?' holiday':'';
+    cells+='<div class="cal-cell'+(past?' past':'')+(locked?' locked':'')+hClass+'"><div class="cal-day">'+d+(ds===todayStr()?' •':'')+(hInfo?' <span title="'+esc(hInfo)+'" style="color:#f43f5e">🎉</span>':'')+'</div>'+(hInfo?'<span class="cal-holiday-badge">'+esc(hInfo.length>14?hInfo.slice(0,12)+'…':hInfo)+'</span>':'')+slotPill(ds,'morning',pub,locked)+slotPill(ds,'evening',pub,locked)+'</div>';}
   ensureSlotCounts(mk);
   const est=estimateFor(u.id);
   $('#viewRoot').innerHTML=quotesDashboardHTML()+
@@ -2402,7 +2419,7 @@ function renderSales(){
   '<div class="statrow"><div class="stat"><small>Jumlah jualan bulan semasa</small><b>'+rm(mTotal)+'</b></div></div>'+
   '<div class="card glass"><h3>Rekod Terkini</h3>'+
   (sales.length?sales.map(s=>{const rate=shiftRate(s.date,s.shift,s.amount);
-    return '<div class="brow"><div><b>'+dShort(s.date)+'</b> <span class="chip chip-info">'+(s.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span> <span class="chip '+(isWeekend(s.date)?'chip-wait':'chip-no')+'">'+(isWeekend(s.date)?'Weekend':'Weekday')+'</span></div>'+
+    return '<div class="brow"><div><b>'+dShort(s.date)+'</b> <span class="chip chip-info">'+(s.shift==='morning'?'☀ Pagi':'🌙 Petang')+'</span> <span class="chip '+(isWeekend(s.date)?'chip-wait':'chip-no')+'">'+(isWeekend(s.date)?'Weekend':'Weekday')+'</span>'+(DB.settings.holidayEnabled&&isHoliday(s.date)?' <span class="chip" title="'+esc(holidayName(s.date))+'" style="background:#e11d48;color:#fff">🎉 '+esc(holidayName(s.date))+'</span>':'')+'</div>'+
     '<div class="brow-act"><span class="chip '+(rate>S.baseRate?'chip-ok':'')+'">'+(rate>S.baseRate?'⚡ RM'+S.highRate+'/jam':'RM'+S.baseRate+'/jam')+'</span><b class="amt">'+rm(s.amount)+'</b><button class="btn btn-sm" onclick="editSale(\''+s.date+'\',\''+s.shift+'\')">✏️</button></div></div>'}).join(''):'<p style="opacity:.7">Tiada rekod lagi.</p>')+'</div>';
   $('#viewRoot').innerHTML=html;
 }
@@ -2566,6 +2583,15 @@ function renderMSettings(){
   f('stTyph','Elaun typhoid / kitaran (RM)',S.typhoidAllowance)+f('stTyphMax','Elaun typhoid — maksimum bayaran (kali)',S.typhoidMax,'1')+
   f('stMax','Maksimum staff setiap syif',S.maxPerShift,'1')+f('stHrs','Jam setiap syif',S.shiftHours,'0.5')+f('stStartHr','Waktu mula syif pagi (jam 24 — 8=8pagi, 9=9pagi, 10=10pagi)',(S.shiftStartHour!=null?S.shiftStartHour:10),'1')+'</div>'+
   '<label class="chk"><input type="checkbox" id="stStaffSales"'+(S.allowStaffSales?' checked':'')+'> Benarkan staff input jualan sendiri (PRD 5.5)</label>'+
+  '<hr style="margin:14px 0;border:0;border-top:1px solid rgba(255,255,255,.1)">'+
+  '<h3 style="margin:6px 0">🎉 Public Holiday Rate</h3>'+
+  '<label class="chk"><input type="checkbox" id="stHolidayEn"'+(S.holidayEnabled?' checked':'')+'> Aktifkan rate istimewa untuk hari cuti umum</label>'+
+  '<div class="formgrid" style="margin-top:8px">'+
+  f('stHolidayRate','Kadar cuti umum / jam (RM)',(S.holidayRate!=null?S.holidayRate:10))+
+  f('stHolidayThr','Sasaran jualan cuti umum (RM)',(S.holidayThreshold!=null?S.holidayThreshold:400))+
+  '</div>'+
+  '<p class="hint">Manager urus tarikh cuti di butang 📅 di bawah. Hari cuti dengan sales ≥ sasaran akan dapat kadar cuti; sebaliknya guna kadar asas.</p>'+
+  '<button class="btn btn-sm btn-primary" onclick="openHolidaysModal()" style="margin-top:8px">📅 Urus Cuti Umum ('+((DB.publicHolidays||[]).length)+' tarikh)</button>'+
   '<button class="btn btn-primary btn-big" onclick="saveSettings()">💾 Simpan Tetapan</button>'+
   '<p class="hint">Semua kadar &amp; syarat bonus boleh dikonfigur tanpa ubah kod. Berkuat kuasa serta-merta untuk slip yang dijana selepas ini.</p></div>'+
   '<div class="card glass"><h3>🔐 Ringkasan Keselamatan Aktif (Supabase)</h3><ul class="seclist">'+
@@ -4853,6 +4879,105 @@ function generateSalesReport(){
     pa.style.display='none';
     pa.innerHTML='';
   },200);
+}
+
+// Mapper untuk public_holidays dari Supabase
+const mapHoliday=r=>({id:r.id,date:r.holiday_date,name:r.name||'',description:r.description||'',createdAt:r.created_at?Date.parse(r.created_at):null});
+
+// Helper: check jika tarikh adalah public holiday (hanya bila toggle ON)
+function isHoliday(ds){
+  if(!DB.settings||!DB.settings.holidayEnabled)return false;
+  return (DB.publicHolidays||[]).some(h=>h.date===ds);
+}
+
+// Helper: dapatkan nama cuti (untuk display)
+function holidayName(ds){
+  const h=(DB.publicHolidays||[]).find(x=>x.date===ds);
+  return h?h.name:'';
+}
+
+/* ---------- 17l. PUBLIC HOLIDAYS (Manager) ---------- */
+// Buka modal urus cuti umum
+function openHolidaysModal(){
+  const me=reqMgr();if(!me)return;
+  renderHolidaysList();
+}
+
+function renderHolidaysList(){
+  const list=(DB.publicHolidays||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  let html='<div class="chips" style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="openHolidayEditModal()">➕ Tambah Cuti</button><button class="btn ghost btn-sm" onclick="closeModal()">✕ Tutup</button></div>';
+  if(!list.length){
+    html+='<div class="empty-state empty-state-sm"><div class="empty-ic">📅</div><h3>Belum Ada Cuti Umum</h3><p>Tambah tarikh cuti (cth: Hari Raya, Tahun Baru) — kalender &amp; payslip akan gunakannya.</p></div>';
+  }else{
+    html+='<div style="max-height:60vh;overflow-y:auto">'+list.map(h=>{
+      const today=todayStr();
+      const past=h.date<today;
+      return '<div class="card glass"><div class="brow"><div><b>🎉 '+esc(h.name)+'</b>'+
+        '<div class="chips" style="margin-top:5px">'+
+        '<span class="chip chip-info">'+fmtDateDS(h.date)+'</span>'+
+        (past?' <span class="chip chip-no">Lampau</span>':'<span class="chip chip-ok">Akan datang</span>')+
+        '</div>'+
+        (h.description?'<p class="hint" style="margin:6px 0 0">'+esc(h.description)+'</p>':'')+
+        '</div><div class="brow-act">'+
+        '<button class="btn btn-sm btn-primary" onclick="openHolidayEditModal(\''+h.id+'\')">✏️ Edit</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="deleteHoliday(\''+h.id+'\')">🗑 Padam</button>'+
+        '</div></div></div>';
+    }).join('')+'</div>';
+  }
+  openModal('📅 Urus Cuti Umum',html);
+}
+
+function openHolidayEditModal(id){
+  const h=id?(DB.publicHolidays||[]).find(x=>x.id===id):null;
+  const today=todayStr();
+  const html='<label class="field"><span>📅 Tarikh Cuti *</span><input type="date" id="hDate" value="'+(h?h.date:today)+'" min="'+today.slice(0,4)+'-01-01" max="'+today.slice(0,4)+'-12-31"></label>'+
+    '<label class="field"><span>🏷️ Nama Cuti *</span><input id="hName" value="'+(h?esc(h.name):'')+'" placeholder="cth: Hari Raya Aidilfitri"></label>'+
+    '<label class="field"><span>📝 Penerangan <small>(opsyenal)</small></span><textarea id="hDesc" rows="2" placeholder="cth: 1 hari cuti kebangsaan">'+(h?esc(h.description||''):'')+'</textarea></label>'+
+    '<div class="chips" style="margin-top:10px">'+
+    '<button class="btn btn-primary btn-big" onclick="saveHoliday('+(h?"'"+h.id+"'":'null')+')">💾 Simpan</button>'+
+    '<button class="btn ghost" onclick="renderHolidaysList()">↩ Balik</button>'+
+    '</div>';
+  openModal(h?'✏️ Edit Cuti':'➕ Tambah Cuti',html);
+}
+
+async function saveHoliday(id){
+  const me=reqMgr();if(!me)return;
+  const date=($('#hDate')||{}).value||'';
+  const name=($('#hName')||{}).value||'';
+  const desc=($('#hDesc')||{}).value||'';
+  if(!date)return toast('Tarikh wajib diisi','err');
+  if(!name.trim())return toast('Nama cuti wajib diisi','err');
+  if(name.trim().length<3)return toast('Nama cuti terlalu pendek (3+ aksara)','err');
+  // Check duplicate date (selain diri sendiri)
+  const dup=(DB.publicHolidays||[]).find(x=>x.date===date&&x.id!==id);
+  if(dup)return toast('Tarikh ini dah ada cuti: '+dup.name,'err');
+  const payload={holiday_date:date,name:name.trim(),description:desc.trim()};
+  const btn=event&&event.target;if(btn)btn.disabled=true;
+  let result;
+  if(id){
+    result=await SB.from('public_holidays').update(payload).eq('id',id);
+  }else{
+    payload.created_by=ME.id;
+    result=await SB.from('public_holidays').insert(payload);
+  }
+  if(btn)btn.disabled=false;
+  if(result.error)return toast(friendly(result.error),'err');
+  await logAudit(id?'holiday_upd':'holiday_ins',date+' — '+name.trim());
+  await sync();
+  renderHolidaysList();
+  toast('Cuti disimpan ✔','ok');
+}
+
+async function deleteHoliday(id){
+  const me=reqMgr();if(!me)return;
+  const h=(DB.publicHolidays||[]).find(x=>x.id===id);if(!h)return;
+  if(!confirm('Padam cuti "'+h.name+'"?\n\nTarikh: '+fmtDateDS(h.date)))return;
+  const {error}=await SB.from('public_holidays').delete().eq('id',id);
+  if(error)return toast(friendly(error),'err');
+  await logAudit('holiday_del',h.date+' — '+h.name);
+  await sync();
+  renderHolidaysList();
+  toast('Cuti dibuang ✔','ok');
 }
 
 /* ---------- 18. BOOT (dengan paparan ralat) ---------- */
